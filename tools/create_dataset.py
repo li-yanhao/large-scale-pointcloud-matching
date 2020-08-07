@@ -169,14 +169,6 @@ def create_lidar_scan_h5():
         grp.create_dataset("global_pose", data=pose)   
     f.flush()
 
-def read_h5df(file):
-    f = h5py.File(file, "r")
-
-    def visit_file(name):
-        print(name)
-
-    f.visit(visit_file)
-
 
 if __name__== "__main__":
     # quaternion = np.array([0.8, 0.6, 0, 0])
@@ -226,3 +218,4 @@ if __name__== "__main__":
 #             pc_buffer.append(p[0])
 #             pc_buffer.append(p[1])
 #             pc_buffer.append(p[2])
+
