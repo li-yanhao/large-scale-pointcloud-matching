@@ -11,6 +11,11 @@
 #include <pcl/segmentation/extract_clusters.h>
 
 
+std::vector<pcl::PointCloud<pcl::PointXYZ>> cluster()
+{
+  
+}
+
 int 
 main (int argc, char** argv)
 {
@@ -27,7 +32,7 @@ main (int argc, char** argv)
   vg.setLeafSize (0.1f, 0.1f, 0.1f);
   vg.filter (*cloud_filtered);
 
-  *cloud_filtered = *cloud;
+  // *cloud_filtered = *cloud;
   std::cout << "PointCloud after filtering has: " << cloud_filtered->points.size ()  << " data points." << std::endl; //*
 
   // Create the segmentation object for the planar model and set all the parameters
@@ -40,36 +45,36 @@ main (int argc, char** argv)
   seg.setModelType (pcl::SACMODEL_PLANE);
   seg.setMethodType (pcl::SAC_RANSAC);
   seg.setMaxIterations (200);
-  seg.setDistanceThreshold (0.5);
+  seg.setDistanceThreshold (1);
 
-  int nr_points = (int) cloud_filtered->points.size ();
-  while (cloud_filtered->points.size () > 0.5 * nr_points)
-  {
-    // Segment the largest planar component from the remaining cloud
-    seg.setInputCloud (cloud_filtered);
-    seg.segment (*inliers, *coefficients);
-    if (inliers->indices.size () == 0)
-    {
-      std::cout << "Could not estimate a planar model for the given dataset." << std::endl;
-      break;
-    }
-    std::cout << "coef: " << *coefficients << std::endl;
+  // int nr_points = (int) cloud_filtered->points.size ();
+  // while (cloud_filtered->points.size () > 0.5 * nr_points)
+  // {
+  //   // Segment the largest planar component from the remaining cloud
+  //   seg.setInputCloud (cloud_filtered);
+  //   seg.segment (*inliers, *coefficients);
+  //   if (inliers->indices.size () == 0)
+  //   {
+  //     std::cout << "Could not estimate a planar model for the given dataset." << std::endl;
+  //     break;
+  //   }
+  //   std::cout << "coef: " << *coefficients << std::endl;
 
-    // Extract the planar inliers from the input cloud
-    pcl::ExtractIndices<pcl::PointXYZ> extract;
-    extract.setInputCloud (cloud_filtered);
-    extract.setIndices (inliers);
-    extract.setNegative (false);
+  //   // Extract the planar inliers from the input cloud
+  //   pcl::ExtractIndices<pcl::PointXYZ> extract;
+  //   extract.setInputCloud (cloud_filtered);
+  //   extract.setIndices (inliers);
+  //   extract.setNegative (false);
 
-    // Get the points associated with the planar surface
-    extract.filter (*cloud_plane);
-    std::cout << "PointCloud representing the planar component: " << cloud_plane->points.size () << " data points." << std::endl;
+  //   // Get the points associated with the planar surface
+  //   extract.filter (*cloud_plane);
+  //   std::cout << "PointCloud representing the planar component: " << cloud_plane->points.size () << " data points." << std::endl;
 
-    // Remove the planar inliers, extract the rest
-    extract.setNegative (true);
-    extract.filter (*cloud_f);
-    *cloud_filtered = *cloud_f;
-  }
+  //   // Remove the planar inliers, extract the rest
+  //   extract.setNegative (true);
+  //   extract.filter (*cloud_f);
+  //   *cloud_filtered = *cloud_f;
+  // }
 
   // Creating the KdTree object for the search method of the extraction
   pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
@@ -79,7 +84,7 @@ main (int argc, char** argv)
   pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
 
   ec.setClusterTolerance (0.5);
-  ec.setMinClusterSize (50);
+  ec.setMinClusterSize (100);
   // ec.setMaxClusterSize (25000);
   ec.setSearchMethod (tree);
   ec.setInputCloud (cloud_filtered);
@@ -100,6 +105,17 @@ main (int argc, char** argv)
       point_rgb.z = cloud_filtered->points[*pit].z;
       cloud_cluster->points.push_back (point_rgb); //*
     }
+
+    // if (cloud_cluster->points.size() > 1000) {
+    //   tree->setInputCloud (cloud_cluster);
+    //   ec.setClusterTolerance (0.2);
+    //   ec.setMinClusterSize (100);
+    //   // ec.setMaxClusterSize (25000);
+    //   ec.setSearchMethod (tree);
+    //   ec.setInputCloud (cloud_cluster);
+    //   ec.extract (cluster_indices);
+    // }
+
     cloud_cluster->width = cloud_cluster->points.size ();
     cloud_cluster->height = 1;
     cloud_cluster->is_dense = true;

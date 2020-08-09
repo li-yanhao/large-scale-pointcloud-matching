@@ -13,3 +13,10 @@ add_definitions(${PCL_DEFINITIONS})
 
 add_executable (region_growing_rgb_segmentation region_growing_rgb_segmentation.cpp)
 target_link_libraries (region_growing_rgb_segmentation ${PCL_LIBRARIES})
+
+add_executable (euclidean_cluster_extraction euclidean_cluster_extraction.cpp)
+target_link_libraries (euclidean_cluster_extraction ${PCL_LIBRARIES})
+
+
+add_executable (conditional_euclidean_clustering conditional_euclidean_clustering.cpp)
+target_link_libraries (conditional_euclidean_clustering ${PCL_LIBRARIES})

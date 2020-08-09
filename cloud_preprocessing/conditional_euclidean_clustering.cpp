@@ -13,7 +13,7 @@ typedef pcl::PointXYZINormal PointTypeFull;
 bool
 enforceIntensitySimilarity (const PointTypeFull& point_a, const PointTypeFull& point_b, float squared_distance)
 {
-  if (std::abs (point_a.intensity - point_b.intensity) < 5.0f)
+    if (std::abs (point_a.intensity - point_b.intensity) < 5.0f)
     return (true);
   else
     return (false);
@@ -31,12 +31,23 @@ enforceCurvatureOrIntensitySimilarity (const PointTypeFull& point_a, const Point
 }
 
 bool
-enforceCurvatureSimilarityAndVertical (const PointTypeFull& point_a, const PointTypeFull& point_b, float squared_distance)
+enforceCurvatureSimilarity (const PointTypeFull& point_a, const PointTypeFull& point_b, float squared_distance)
 {
   Eigen::Map<const Eigen::Vector3f> point_a_normal = point_a.getNormalVector3fMap (), point_b_normal = point_b.getNormalVector3fMap ();
   // std::cout << "a normal z: " << point_a_normal.z() << std::endl;
   // std::cout << "b normal z: " << point_b_normal.z() << std::endl;
-  if (std::abs (point_a_normal.dot (point_b_normal)) > 0.9  && (std::abs(point_a_normal.z()) > 0.8 || std::abs(point_b_normal.z()) > 0.8))
+  if (std::abs (point_a_normal.dot (point_b_normal)) > 0.5 )
+    return (true);
+  return (false);
+}
+
+bool
+enforceCurvatureSmall (const PointTypeFull& point_a, const PointTypeFull& point_b, float squared_distance)
+{
+  Eigen::Map<const Eigen::Vector3f> point_a_normal = point_a.getNormalVector3fMap (), point_b_normal = point_b.getNormalVector3fMap ();
+  // std::cout << "a normal z: " << point_a_normal.z() << std::endl;
+  // std::cout << "b normal z: " << point_b_normal.z() << std::endl;
+  if (point_a.curvature < 0.1 && point_b.curvature < 0.1)
     return (true);
   return (false);
 }
@@ -82,7 +93,9 @@ main (int argc, char** argv)
   vg.setLeafSize (0.1, 0.1, 0.1);
   vg.setDownsampleAllData (true);
   vg.filter (*cloud_out);
+  cloud_out = cloud_in;
   std::cerr << ">> Done: " << tt.toc () << " ms, " << cloud_out->points.size () << " points\n";
+
 
   // Set up a Normal Estimation class and merge data in cloud_with_normals
   std::cerr << "Computing normals...\n", tt.tic ();
@@ -90,17 +103,20 @@ main (int argc, char** argv)
   pcl::NormalEstimation<PointTypeIO, PointTypeFull> ne;
   ne.setInputCloud (cloud_out);
   ne.setSearchMethod (search_tree);
-  ne.setRadiusSearch (2.0);
+  ne.setRadiusSearch (0.5);
   ne.compute (*cloud_with_normals);
   std::cerr << ">> Done: " << tt.toc () << " ms\n";
 
+  pcl::search::KdTree<PointTypeFull>::Ptr tree (new pcl::search::KdTree<PointTypeFull>);
   // Set up a Conditional Euclidean Clustering class
   std::cerr << "Segmenting to clusters...\n", tt.tic ();
   pcl::ConditionalEuclideanClustering<PointTypeFull> cec (true);
   cec.setInputCloud (cloud_with_normals);
-  cec.setConditionFunction (&enforceCurvatureSimilarityAndVertical);
-  cec.setClusterTolerance(2);
-  cec.setMinClusterSize (200);
+  cec.setConditionFunction (&enforceCurvatureSmall);
+  cec.setClusterTolerance(0.2);
+  // cec.setSearchMethod (search_tree);
+  cec.searcher_ = tree;
+  cec.setMinClusterSize (100);
   // cec.setMaxClusterSize (cloud_with_normals->points.size () / 100);
   cec.segment (*clusters);
   cec.getRemovedClusters (small_clusters, large_clusters);
@@ -131,6 +147,7 @@ main (int argc, char** argv)
     std::cout << "cluster " << i << " contains " << (*clusters)[i].indices.size() << " points" << std::endl;
   }
 
+#if 0
   // Remove the largest cluster, ground points, from the point cloud
   pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
   for (size_t i = 0; i < clusters->back().indices.size(); ++i) {
@@ -150,6 +167,7 @@ main (int argc, char** argv)
   // Remove the planar inliers, extract the rest
   extract.setNegative (true);
   extract.filter (*cloud_out);
+#endif 
 
   // Save the output point cloud
   std::cerr << "Saving...\n", tt.tic ();

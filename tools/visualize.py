@@ -41,18 +41,20 @@ o3d.visualization.draw_geometries([pcd])
 
 import h5py
 import numpy as np
+import open3d as o3d
 f = h5py.File("my_file.h5", "r")
 x = np.array(f["MyGroup1/map/dset"])
 print(x)
 
 # f = h5py.File("/media/admini/My_data/zhonghaun_06122/partial/partial_zhonghuan.bag_segmented_submaps.h5", "r")
-f = h5py.File("/media/admini/My_data/0721/zhonghuan/Paul_Zhonghuan.bag_segmented_submaps.h5", "r")
+# f = h5py.File("/media/admini/My_data/0721/zhonghuan/Paul_Zhonghuan.bag_segmented_submaps.h5", "r")
+f = h5py.File("/media/li/LENOVO/Paul_Zhonghuan.bag_segmented_submaps.h5", "r")
 f.visit(print)
 
 
 submap_id = 2
 pcds = []
-for submap_id in range(0, 1):
+for submap_id in range(100, 102):
     num_segments = np.array(f["submap_" + str(submap_id) + "/num_segments"])[0]
     for i in range(num_segments):
         segment = np.array(f["submap_" + str(submap_id) + "/segment_" + str(i)])
@@ -60,6 +62,7 @@ for submap_id in range(0, 1):
             continue
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(segment)
+        pcd = pcd.voxel_down_sample(voxel_size=0.1)
         pcd.paint_uniform_color([(0.17*i+submap_id*0.7) % 1, (0.31*i+submap_id*0.7) % 1, (0.53*i+submap_id*0.7)%1])
         # pcd.paint_uniform_color(
         #     [(submap_id * 0.7 + 0.2) % 1, (submap_id * 0.5 + 0.3) % 1, (submap_id * 0.3+0.5) % 1])
