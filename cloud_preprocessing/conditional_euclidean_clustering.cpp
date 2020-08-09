@@ -32,12 +32,24 @@ enforceIntensitySimilarity (const PointTypeFull& point_a, const PointTypeFull& p
 // }
 
 bool
+customCondition(const PointTypeFull& point_a, const PointTypeFull& point_b, float squared_distance)
+{
+  Eigen::Map<const Eigen::Vector3f> point_a_normal = point_a.getNormalVector3fMap (), point_b_normal = point_b.getNormalVector3fMap ();
+  // std::cout << "a normal z: " << point_a_normal.z() << std::endl;
+  // std::cout << "b normal z: " << point_b_normal.z() << std::endl;
+  if (squared_distance < 0.25 && (point_a.curvature < 0.05 && point_b.curvature < 0.05)) {
+    return (true);
+  }
+  return (false);
+}
+
+bool
 enforceCurvatureSimilarity (const PointTypeFull& point_a, const PointTypeFull& point_b, float squared_distance)
 {
   Eigen::Map<const Eigen::Vector3f> point_a_normal = point_a.getNormalVector3fMap (), point_b_normal = point_b.getNormalVector3fMap ();
   // std::cout << "a normal z: " << point_a_normal.z() << std::endl;
   // std::cout << "b normal z: " << point_b_normal.z() << std::endl;
-  if (std::abs (point_a_normal.dot (point_b_normal)) > 0.5 )
+  if (std::abs (point_a.curvature - point_b.curvature) < 0.4 )
     return (true);
   return (false);
 }
@@ -53,24 +65,24 @@ enforceCurvatureSmall (const PointTypeFull& point_a, const PointTypeFull& point_
   return (false);
 }
 
-// bool
-// customRegionGrowing (const PointTypeFull& point_a, const PointTypeFull& point_b, float squared_distance)
-// {
-//   Eigen::Map<const Eigen::Vector3f> point_a_normal = point_a.getNormalVector3fMap (), point_b_normal = point_b.getNormalVector3fMap ();
-//   if (squared_distance < 10000)
-//   {
-//     if (std::abs (point_a.intensity - point_b.intensity) < 8.0f)
-//       return (true);
-//     if (std::abs (point_a_normal.dot (point_b_normal)) < 0.06)
-//       return (true);
-//   }
-//   else
-//   {
-//     if (std::abs (point_a.intensity - point_b.intensity) < 3.0f)
-//       return (true);
-//   }
-//   return (false);
-// }
+bool
+customRegionGrowing (const PointTypeFull& point_a, const PointTypeFull& point_b, float squared_distance)
+{
+  Eigen::Map<const Eigen::Vector3f> point_a_normal = point_a.getNormalVector3fMap (), point_b_normal = point_b.getNormalVector3fMap ();
+  if (squared_distance < 1)
+  {
+    if (std::abs (point_a.intensity - point_b.intensity) < 20.0f)
+      return (true);
+    if (std::abs (point_a_normal.dot (point_b_normal)) > 0.9)
+      return (true);
+  }
+  else
+  {
+    if (std::abs (point_a.intensity - point_b.intensity) < 10.0f)
+      return (true);
+  }
+  return (false);
+}
 
 int
 main (int argc, char** argv)
@@ -104,7 +116,7 @@ main (int argc, char** argv)
   pcl::NormalEstimation<PointTypeIO, PointTypeFull> ne;
   ne.setInputCloud (cloud_out);
   ne.setSearchMethod (search_tree);
-  ne.setRadiusSearch (0.5);
+  ne.setRadiusSearch (1);
   ne.compute (*cloud_with_normals);
   std::cerr << ">> Done: " << tt.toc () << " ms\n";
 
@@ -113,8 +125,8 @@ main (int argc, char** argv)
   std::cerr << "Segmenting to clusters...\n", tt.tic ();
   pcl::ConditionalEuclideanClustering<PointTypeFull> cec (true);
   cec.setInputCloud (cloud_with_normals);
-  cec.setConditionFunction (&enforceCurvatureSmall);
-  cec.setClusterTolerance(0.2);
+  cec.setConditionFunction (&customCondition);
+  cec.setClusterTolerance(0.5);
   // cec.setSearchMethod (search_tree);
   cec.searcher_ = tree;
   cec.setMinClusterSize (100);
