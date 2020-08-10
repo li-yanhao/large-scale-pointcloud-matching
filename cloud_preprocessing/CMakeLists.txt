@@ -8,9 +8,17 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # SET(CMAKE_BUILD_TYPE "Release")
 
+include_directories(
+  ./
+)
+
 include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
+
+
+# add_library(descriptors descriptors.h)
+# target_link_libraries (descriptors ${PCL_LIBRARIES})
 
 add_executable (region_growing_rgb_segmentation region_growing_rgb_segmentation.cpp)
 target_link_libraries (region_growing_rgb_segmentation ${PCL_LIBRARIES})
@@ -19,8 +27,11 @@ add_executable (euclidean_cluster_extraction euclidean_cluster_extraction.cpp)
 target_link_libraries (euclidean_cluster_extraction ${PCL_LIBRARIES})
 
 
-add_executable (conditional_euclidean_clustering conditional_euclidean_clustering.cpp)
+add_executable (conditional_euclidean_clustering descriptors.hpp conditional_euclidean_clustering.cpp)
 target_link_libraries (conditional_euclidean_clustering ${PCL_LIBRARIES})
 
-add_executable (descriptors descriptors.cpp)
-target_link_libraries (descriptors ${PCL_LIBRARIES})
+add_executable (mincut_segmentation mincut_segmentation.cpp)
+target_link_libraries (mincut_segmentation ${PCL_LIBRARIES})
+
+add_executable (segments_correspondences segments_correspondences.cpp)
+target_link_libraries (segments_correspondences ${PCL_LIBRARIES})

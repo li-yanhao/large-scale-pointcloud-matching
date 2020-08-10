@@ -16,13 +16,12 @@ std::vector<pcl::PointCloud<pcl::PointXYZ>> cluster()
   
 }
 
-int 
-main (int argc, char** argv)
+int main (int argc, char** argv)
 {
   // Read in the cloud data
   pcl::PCDReader reader;
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>), cloud_f (new pcl::PointCloud<pcl::PointXYZ>);
-  reader.read (argv[1], *cloud);
+  reader.read(argv[1], *cloud);
   std::cout << "PointCloud before filtering has: " << cloud->points.size () << " data points." << std::endl; //*
 
   // Create the filtering object: downsample the dataset using a leaf size of 1cm
@@ -42,10 +41,10 @@ main (int argc, char** argv)
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_plane (new pcl::PointCloud<pcl::PointXYZ> ());
   pcl::PCDWriter writer;
   seg.setOptimizeCoefficients (true);
-  seg.setModelType (pcl::SACMODEL_PLANE);
-  seg.setMethodType (pcl::SAC_RANSAC);
+  seg.setModelType(pcl::SACMODEL_PLANE);
+  seg.setMethodType(pcl::SAC_RANSAC);
   seg.setMaxIterations (200);
-  seg.setDistanceThreshold (1);
+  seg.setDistanceThreshold (0.5);
 
   // int nr_points = (int) cloud_filtered->points.size ();
   // while (cloud_filtered->points.size () > 0.5 * nr_points)
@@ -55,8 +54,8 @@ main (int argc, char** argv)
   //   seg.segment (*inliers, *coefficients);
   //   if (inliers->indices.size () == 0)
   //   {
-  //     std::cout << "Could not estimate a planar model for the given dataset." << std::endl;
-  //     break;
+  //       std::cout << "Could not estimate a planar model for the given dataset." << std::endl;
+  //       break;
   //   }
   //   std::cout << "coef: " << *coefficients << std::endl;
 

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <pcl/point_types.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl/io/pcd_io.h>
@@ -27,29 +29,58 @@ Eigen::Vector3f getRealSortedEigenValues(Eigen::Matrix<std::complex<float>, 3, 1
 
 } // namespace
 
-
 namespace pcl {
 
 // L: linearity, P: planarity, S: sphericality
 struct PointXYZLPS
 {
-	// PCL_ADD_POINT4D;
-	union
-	{
-		float coordinate[3];
-		struct
-		{
-			float x;
-			float y;
-			float z;
-		};
-	};
+	PCL_ADD_POINT4D;
+	// union
+	// {
+	// 	float coordinate[3];
+	// 	struct
+	// 	{
+	// 		float x;
+	// 		float y;
+	// 		float z;
+	// 	};
+	// };
 	float linearity;
 	float planarity;
 	float sphericity;
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 } EIGEN_ALIGN16;
 
+struct PointXYZILPS
+{
+    PCL_ADD_POINT4D;                  // preferred way of adding a XYZ+padding
+    float intensity;
+    float linearity;
+	float planarity;
+	float sphericity;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW   // make sure our new allocators are aligned
+} EIGEN_ALIGN16;                    // enforce SSE padding for correct memory alignment
+
+
+// struct PointXYZILPS
+// {
+// 	// PCL_ADD_POINT4D;
+// 	union
+// 	{
+// 		float coordinate[3];
+// 		struct
+// 		{
+// 			float x;
+// 			float y;
+// 			float z;
+// 		};
+// 	};
+//     float intensity;
+// 	float linearity;
+// 	float planarity;
+// 	float sphericity;
+// 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+// } EIGEN_ALIGN16;
 
 template <typename PointInT, typename PointOutT>
 class DescriptorEstimation : public Feature<PointInT, PointOutT>
@@ -143,6 +174,15 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(PointXYZLPS,// 注册点类型宏
 	(float, sphericity, sphericity)
 )
 
+POINT_CLOUD_REGISTER_POINT_STRUCT(PointXYZILPS,
+	(float, x, x)
+	(float, y, y)
+	(float, z, z)
+    (float, intensity, intensity)
+	(float, linearity, linearity)
+	(float, planarity, planarity)
+	(float, sphericity, sphericity)
+)
 
 // pcl::NormalEstimation<PointTypeIO, PointTypeFull> ne;
 // ne.setInputCloud (cloud_out);
@@ -280,12 +320,6 @@ int test_gt(int argc, char** argv)
     cloudOut->width = 1;
     cloudOut->height = cloudOut->points.size();
     pcl::io::savePCDFile ("descriptors_output.pcd", *cloudOut);
-}
-
-int main(int argc, char** argv)
-{
-    // test_gt(argc, argv);
-    test_new(argc, argv);
-
+    
     return 0;
 }
