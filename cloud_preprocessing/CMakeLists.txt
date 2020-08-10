@@ -35,3 +35,6 @@ target_link_libraries (mincut_segmentation ${PCL_LIBRARIES})
 
 add_executable (segments_correspondences segments_correspondences.cpp)
 target_link_libraries (segments_correspondences ${PCL_LIBRARIES})
+
+add_executable (bird_view_poi bird_view_poi.cpp)
+target_link_libraries (bird_view_poi ${PCL_LIBRARIES})
