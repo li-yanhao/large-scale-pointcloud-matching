@@ -33,8 +33,15 @@ target_link_libraries (conditional_euclidean_clustering ${PCL_LIBRARIES})
 add_executable (mincut_segmentation mincut_segmentation.cpp)
 target_link_libraries (mincut_segmentation ${PCL_LIBRARIES})
 
-add_executable (segments_correspondences segments_correspondences.cpp)
-target_link_libraries (segments_correspondences ${PCL_LIBRARIES})
+add_executable (segment_correspondences segment_correspondences.cpp)
+target_link_libraries (segment_correspondences ${PCL_LIBRARIES})
+
+add_executable (submap_correspondences submap_correspondences.cpp)
+target_link_libraries (submap_correspondences ${PCL_LIBRARIES})
 
 add_executable (bird_view_poi bird_view_poi.cpp)
 target_link_libraries (bird_view_poi ${PCL_LIBRARIES})
+
+add_executable (ground_filtering ground_filtering.cpp)
+target_link_libraries (ground_filtering ${PCL_LIBRARIES})
+

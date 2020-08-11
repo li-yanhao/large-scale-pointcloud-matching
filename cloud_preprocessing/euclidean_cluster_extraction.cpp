@@ -31,7 +31,7 @@ int main (int argc, char** argv)
   vg.setLeafSize (0.1f, 0.1f, 0.1f);
   vg.filter (*cloud_filtered);
 
-  // *cloud_filtered = *cloud;
+  *cloud_filtered = *cloud;
   std::cout << "PointCloud after filtering has: " << cloud_filtered->points.size ()  << " data points." << std::endl; //*
 
   // Create the segmentation object for the planar model and set all the parameters
