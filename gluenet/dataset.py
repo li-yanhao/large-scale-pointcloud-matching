@@ -8,7 +8,7 @@ import torch
 
 def create_submap_dataset(h5file: h5py.File):
     dataset = {}
-    center_xy = torch.Tensor([0., 0.])
+    center_submap_xy = torch.Tensor([0., 0.])
     num_points = 0
     for submap_name in h5file.keys():
         submap_dict = {}
@@ -18,11 +18,15 @@ def create_submap_dataset(h5file: h5py.File):
             # submap_dict[segment_name] = np.array(h5file[submap_name + '/num_segments'])
             segment_name = submap_name + '/segment_' + str(i)
             segments.append(np.array(h5file[segment_name]))
-            center_xy += segments[-1].sum(axis=0)[:2]
+            center_submap_xy += segments[-1].sum(axis=0)[:2]
             num_points += segments[-1].shape[0]
-        center_xy /= num_points
-        segments = [torch.Tensor(segment - np.hstack([center_xy, 0.])) for segment in segments]
-        submap_dict['segments'] = segments
+        center_submap_xy /= num_points
+        # segments = [np.array(segment - np.hstack([center_submap_xy, 0.])) for segment in segments]
+        segment_centers = np.array([segment.mean(axis=0) - np.hstack([center_submap_xy, 0.]) for segment in segments])
+        segments = [np.array(segment - segment.mean(axis=0)) for segment in segments]
+
+        submap_dict['segment_centers'] = torch.Tensor(segment_centers)
+        submap_dict['segments'] = [torch.Tensor(segment) for segment in segments]
         dataset[submap_name] = submap_dict
 
     return dataset
@@ -35,6 +39,7 @@ def make_match_mask_ground_truth(ids_A: np.ndarray, ids_B: np.ndarray, size_A: i
     match_mask_ground_truth[(ids_A, ids_B)] = 1.
     match_mask_ground_truth[ids_A, -1:] = 0.
     match_mask_ground_truth[-1:, ids_B] = 0.
+
     return torch.Tensor(match_mask_ground_truth)
 
 
@@ -57,7 +62,7 @@ class GlueNetDataset(Dataset):
                                                                                                                    2).transpose(),
             } for correspondence in correspondences_all]
 
-        correspondences_train, correspondences_test = train_test_split(correspondences_all, test_size=0.3,
+        correspondences_train, correspondences_test = train_test_split(correspondences_all, test_size=0.8,
                                                                        random_state=1)
 
         if mode == 'train':
@@ -85,16 +90,18 @@ class GlueNetDataset(Dataset):
         match_mask_ground_truth = make_match_mask_ground_truth(segment_id_pairs[0], segment_id_pairs[1], len(segments_A),
                                                             len(segments_B))
 
-        return self.dataset[submap_A_name]['segments'], self.dataset[submap_B_name]['segments'], match_mask_ground_truth
+        return self.dataset[submap_A_name]['segment_centers'], self.dataset[submap_B_name]['segment_centers'],\
+               self.dataset[submap_A_name]['segments'], self.dataset[submap_B_name]['segments'], \
+               match_mask_ground_truth
 
 if __name__ == "__main__":
-    h5_filename = "/media/admini/My_data/0629/submap_segments.h5"
-    correspondences_filename = "/media/admini/My_data/0629/correspondences.json"
+    h5_filename = "/home/li/Documents/submap_segments.h5"
+    correspondences_filename = "/home/li/Documents/correspondences.json"
 
     gluenet_dataset = GlueNetDataset(h5_filename, correspondences_filename, mode='train')
 
     print("Starting to retrieve data ... ")
     for i in range(10000):
-        segments_A, segments_B, matches_ground_truth = gluenet_dataset[100]
+        centers_A, centers_B, segments_A, segments_B, matches_ground_truth = gluenet_dataset[100]
         print("Retrieved {}-th item.".format(i))
     print("Finished. ")

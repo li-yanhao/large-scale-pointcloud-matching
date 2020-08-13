@@ -106,6 +106,7 @@ if False:
         'match_threshold': 0.2,
     }
 
+    dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     superglue = SuperGlue(super_glue_config)
 
     n0 = 500
@@ -147,8 +148,8 @@ if False:
     # matching_scores1 torch.Size([1, 400])
 
 if True:
-    h5_filename = "/media/admini/My_data/0629/submap_segments.h5"
-    correspondences_filename = "/media/admini/My_data/0629/correspondences.json"
+    h5_filename = "/home/li/Documents/submap_segments.h5"
+    correspondences_filename = "/home/li/Documents/correspondences.json"
     gluenet_dataset = GlueNetDataset(h5_filename, correspondences_filename, mode='train')
 
     train_loader = DataLoader(gluenet_dataset, batch_size=1, shuffle=False)
@@ -156,6 +157,17 @@ if True:
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = DescripNet(k=10, in_dim=3, emb_dims=[32, 64, 64, 512], out_dim=256)
     model = model.to(dev)
+
+    super_glue_config = {
+        'descriptor_dim': 256,
+        'weights': '',
+        'keypoint_encoder': [32, 64, 128, 256],
+        'GNN_layers': ['self', 'cross'] * 9,
+        'sinkhorn_iterations': 100,
+        'match_threshold': 0.2,
+    }
+    superglue = SuperGlue(super_glue_config)
+    superglue = superglue.to(dev)
 
     opt = optim.Adam(model.parameters(), lr=0.1, weight_decay=1e-4)
     num_epochs = 5
@@ -166,17 +178,36 @@ if True:
     scheduler.step()
     model.train()
     with tqdm(train_loader) as tq:
-        for segments_A, segments_B, match_mask_ground_truth in tq:
-            segments_A = [segment.to(dev) for segment in segments_A]
-            segments_B = [segment.to(dev) for segment in segments_B]
+        for centers_A, centers_B, segments_A, segments_B, match_mask_ground_truth in tq:
+            # segments_A = [segment.to(dev) for segment in segments_A]
+            # segments_B = [segment.to(dev) for segment in segments_B]
+            # descriptors_A = torch.Tensor.new_empty(1, 256, len(segments_A), device=dev)
+            # descriptors_B = torch.Tensor.new_empty(1, 256, len(segments_B), device=dev)
             descriptors_A = []
             descriptors_B = []
             opt.zero_grad()
+            # for i in range(len(segments_A)):
+            #     descriptors_A[0, :, i] = model(segments_A[i], dev)
+            # for i in range(len(segments_B)):
+            #     descriptors_B.append(model(segment, dev))
             for segment in segments_A:
-                descriptors_A.append(model(segment, dev))
+                descriptors_A.append(model(segment.to(dev), dev))
             for segment in segments_B:
-                descriptors_B.append(model(segment, dev))
-            # opt.step()
+                descriptors_B.append(model(segment.to(dev), dev))
+            descriptors_A = torch.cat(descriptors_A, dim=0).transpose(0, 1).reshape(1, 256, -1)
+            descriptors_B = torch.cat(descriptors_B, dim=0).transpose(0, 1).reshape(1, 256, -1)
+            data = {
+                'descriptors0': descriptors_A,
+                'descriptors1': descriptors_B,
+                'keypoints0': centers_A.to(dev),
+                'keypoints1': centers_B.to(dev),
+            }
+
+            superglue(data)
+            print(data)
+
+            loss = -data['score'].log() * match_mask_ground_truth
+            opt.step()
 
 def main():
     pass

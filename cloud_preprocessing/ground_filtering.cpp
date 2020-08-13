@@ -2,11 +2,12 @@
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/extract_indices.h>
+#include <pcl/filters/approximate_voxel_grid.h>
 #include <pcl/segmentation/progressive_morphological_filter.h>
 
 int main (int argc, char** argv)
 {   
-    if (argc != 1) {
+    if (argc != 2) {
         std::cout << "usage: ./ground_filtering your-point-cloud-file.pcd" << std::endl;
 
         return -1;
@@ -23,6 +24,11 @@ int main (int argc, char** argv)
 
     std::cerr << "Cloud before filtering: " << std::endl;
     std::cerr << *cloud << std::endl;
+
+    pcl::ApproximateVoxelGrid<pcl::PointXYZ> grid;
+    grid.setInputCloud(cloud);
+    grid.setLeafSize(0.2, 0.2, 0.2);
+    grid.filter(*cloud);
 
     // Create the filtering object
     pcl::ProgressiveMorphologicalFilter<pcl::PointXYZ> pmf;

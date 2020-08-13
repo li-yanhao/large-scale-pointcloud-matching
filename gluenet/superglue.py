@@ -74,13 +74,16 @@ class KeypointEncoder(nn.Module):
     """ Joint encoding of visual appearance and location using MLPs"""
     def __init__(self, feature_dim, layers):
         super().__init__()
-        self.encoder = MLP([4] + layers + [feature_dim])
+        self.encoder = MLP([3] + layers + [feature_dim])
         nn.init.constant_(self.encoder[-1].bias, 0.0)
 
-    def forward(self, kpts, scores):
-        inputs = [kpts.transpose(1, 2), scores.unsqueeze(1)]
-        return self.encoder(torch.cat(inputs, dim=1))
+    # def forward(self, kpts, scores):
+    #     inputs = [kpts.transpose(1, 2), scores.unsqueeze(1)]
+    #     return self.encoder(torch.cat(inputs, dim=1))
 
+    def forward(self, kpts):
+        # inputs = [kpts.transpose(1, 2)]
+        return self.encoder(kpts.transpose(1, 2))
 
 def attention(query, key, value):
     dim = query.shape[1]
@@ -242,12 +245,14 @@ class SuperGlue(nn.Module):
             }
 
         # Keypoint normalization.
-        kpts0 = normalize_keypoints(kpts0, data['image0'].shape)
-        kpts1 = normalize_keypoints(kpts1, data['image1'].shape)
+        # kpts0 = normalize_keypoints(kpts0, data['image0'].shape)
+        # kpts1 = normalize_keypoints(kpts1, data['image1'].shape)
 
         # Keypoint MLP encoder.
-        desc0 = desc0 + self.kenc(kpts0, data['scores0'])
-        desc1 = desc1 + self.kenc(kpts1, data['scores1'])
+        # desc0 = desc0 + self.kenc(kpts0, data['scores0'])
+        # desc1 = desc1 + self.kenc(kpts1, data['scores1'])
+        desc0 = desc0 + self.kenc(kpts0)
+        desc1 = desc1 + self.kenc(kpts1)
 
         # Multi-layer Transformer network.
         desc0, desc1 = self.gnn(desc0, desc1)
@@ -283,9 +288,9 @@ class SuperGlue(nn.Module):
         indices1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
 
         return {
-            'matches0': indices0, # use -1 for invalid match
-            'matches1': indices1, # use -1 for invalid match
-            'matching_scores0': mscores0,
-            'matching_scores1': mscores1,
+            # 'matches0': indices0, # use -1 for invalid match
+            # 'matches1': indices1, # use -1 for invalid match
+            # 'matching_scores0': mscores0,
+            # 'matching_scores1': mscores1,
             'scores': scores
         }
