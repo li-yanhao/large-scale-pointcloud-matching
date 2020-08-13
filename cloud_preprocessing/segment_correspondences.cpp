@@ -223,15 +223,15 @@ void visualize_correspondences(const std::vector<pcl::PointCloud<pcl::PointXYZRG
     }
 
     // 2. draw the remaining clusters
-    std::vector<bool> drawn_bitmap_A(clusters_A.size(), false);
-    std::vector<bool> drawn_bitmap_B(clusters_B.size(), false);
+    std::vector<bool> has_drawn_cluster_A(clusters_A.size(), false);
+    std::vector<bool> has_drawn_cluster_B(clusters_B.size(), false);
     for (const auto& pair : correspondences) {
-        drawn_bitmap_A[pair.first] = true;
-        drawn_bitmap_B[pair.second] = true;
+        has_drawn_cluster_A[pair.first] = true;
+        has_drawn_cluster_B[pair.second] = true;
     }
     
     for (std::size_t i = 0; i < clusters_A.size(); ++i) {
-        if (drawn_bitmap_A[i]) continue;
+        if (has_drawn_cluster_A[i]) continue;
         const auto& cluster = clusters_A[i];
         for (const auto& p : cluster->points) {
             pcl::PointXYZRGB point(63, 63, 63);
@@ -243,13 +243,13 @@ void visualize_correspondences(const std::vector<pcl::PointCloud<pcl::PointXYZRG
     }
 
     for (std::size_t i = 0; i < clusters_B.size(); ++i) {
-        if (drawn_bitmap_B[i]) continue;
+        if (has_drawn_cluster_B[i]) continue;
         const auto& cluster = clusters_B[i];
         for (const auto& p : cluster->points) {
             pcl::PointXYZRGB point(63, 63, 63);
             point.x = p.x;
             point.y = p.y;
-            point.z = p.z;
+            point.z = p.z + supplement_z;
             out_cloud->points.push_back(point);
         }
     }

@@ -1,21 +1,33 @@
-cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.12 FATAL_ERROR)
 
 project(region_growing_rgb_segmentation)
 
+
 find_package(PCL 1.5 REQUIRED)
+find_package(HDF5 REQUIRED COMPONENTS C CXX)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# SET(CMAKE_BUILD_TYPE "Release")
+SET(CMAKE_BUILD_TYPE "Release")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+
 
 include_directories(
   ./
 )
 
+include_directories(${HDF5_INCLUDE_DIRS})
+link_directories( ${HDF5_LIBRARY_DIRS} )
+
 include_directories(${PCL_INCLUDE_DIRS})
 link_directories(${PCL_LIBRARY_DIRS})
 add_definitions(${PCL_DEFINITIONS})
 
+# include_directories(/usr/local/hdf5/include)
+# include_directories(${HDF5_CXX_INCLUDE_DIRS})
+
+# link_directories(${HDF5_LIBRARY_DIRS})
+# link_directories(${HDF5_CXX_LIBRARY_DIRS})
 
 # add_library(descriptors descriptors.h)
 # target_link_libraries (descriptors ${PCL_LIBRARIES})
@@ -37,11 +49,14 @@ add_executable (segment_correspondences segment_correspondences.cpp)
 target_link_libraries (segment_correspondences ${PCL_LIBRARIES})
 
 add_executable (submap_correspondences submap_correspondences.cpp)
-target_link_libraries (submap_correspondences ${PCL_LIBRARIES})
+target_link_libraries (submap_correspondences ${PCL_LIBRARIES} ${HDF5_CXX_LIBRARIES} ${HDF5_LIBRARIES})
+install(TARGETS submap_correspondences DESTINATION bin)
 
 add_executable (bird_view_poi bird_view_poi.cpp)
 target_link_libraries (bird_view_poi ${PCL_LIBRARIES})
 
 add_executable (ground_filtering ground_filtering.cpp)
-target_link_libraries (ground_filtering ${PCL_LIBRARIES})
+target_link_libraries (ground_filtering ${PCL_LIBRARIES} )
 
+add_executable (json_tutorial json_tutorial.cpp)
+# target_link_libraries (json_tutorial ${PCL_LIBRARIES})
