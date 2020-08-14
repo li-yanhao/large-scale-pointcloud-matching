@@ -14,8 +14,9 @@ from gluenet.superglue import SuperGlue
 from gluenet.dataset import GlueNetDataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import os
 
-
+DATA_DIR = '/media/admini/My_data/0629'
 
 # DescripNet
 # input: points(Na, 3)
@@ -95,6 +96,34 @@ if False:
 
 # 200*6 * 369batches => out of memory
 
+def compute_metrics(matches0, matches1, match_matrix_ground_truth):
+    matches0 = np.array(matches0.cpu()).reshape(-1).squeeze() # M
+    matches1 = np.array(matches1.cpu()).reshape(-1).squeeze() # N
+    match_matrix_ground_truth = np.array(match_matrix_ground_truth.cpu()).squeeze()  # M*N
+
+    matches0_idx_tuple = (np.arange(len(matches0)), matches0)
+    matches1_idx_tuple = (np.arange(len(matches1)), matches1)
+
+    matches0_precision_idx_tuple = (np.arange(len(matches0))[matches0>0], matches0[matches0>0])
+    matches1_precision_idx_tuple = (np.arange(len(matches1))[matches1>0], matches1[matches1>0])
+
+    matches0_recall_idx_tuple = (np.arange(len(matches0))[match_matrix_ground_truth[:-1, -1]==0], matches0[match_matrix_ground_truth[:-1, -1]==0])
+    matches1_recall_idx_tuple = (np.arange(len(matches1))[match_matrix_ground_truth[-1, :-1]==0], matches1[match_matrix_ground_truth[-1, :-1]==0])
+
+    match_0_acc = match_matrix_ground_truth[:-1, :][matches0_precision_idx_tuple].mean()
+    match_1_acc = match_matrix_ground_truth.T[:-1, :][matches1_precision_idx_tuple].mean()
+
+    metrics = {
+        "matches0_acc": match_matrix_ground_truth[:-1, :][matches0_idx_tuple].mean(),
+        "matches1_acc": match_matrix_ground_truth.T[:-1, :][matches1_idx_tuple].mean(),
+        "matches0_precision": match_matrix_ground_truth[:-1, :][matches0_precision_idx_tuple].mean(),
+        "matches1_precision": match_matrix_ground_truth.T[:-1, :][matches1_precision_idx_tuple].mean(),
+        "matches0_recall": match_matrix_ground_truth[:-1, :][matches0_recall_idx_tuple].mean(),
+        "matches1_recall": match_matrix_ground_truth.T[:-1, :][matches1_recall_idx_tuple].mean()
+    }
+    return metrics
+
+
 
 if False:
     super_glue_config = {
@@ -148,8 +177,8 @@ if False:
     # matching_scores1 torch.Size([1, 400])
 
 if True:
-    h5_filename = "/home/li/Documents/submap_segments.h5"
-    correspondences_filename = "/home/li/Documents/correspondences.json"
+    h5_filename = os.path.join(DATA_DIR, "submap_segments.h5")
+    correspondences_filename = os.path.join(DATA_DIR, "correspondences.json")
     gluenet_dataset = GlueNetDataset(h5_filename, correspondences_filename, mode='train')
 
     train_loader = DataLoader(gluenet_dataset, batch_size=1, shuffle=False)
@@ -157,6 +186,8 @@ if True:
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = DescripNet(k=10, in_dim=3, emb_dims=[32, 64, 64, 512], out_dim=256)
     model = model.to(dev)
+    model.load_state_dict(torch.load(os.path.join(DATA_DIR, "model-0814.pth"), map_location=dev))
+
 
     super_glue_config = {
         'descriptor_dim': 256,
@@ -168,16 +199,16 @@ if True:
     }
     superglue = SuperGlue(super_glue_config)
     superglue = superglue.to(dev)
+    superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue-0814.pth"), map_location=dev))
 
-    opt = optim.Adam(model.parameters(), lr=0.1, weight_decay=1e-4)
+    opt = optim.Adam(list(model.parameters()) + list(superglue.parameters()), lr=1e-4, weight_decay=1e-5)
     num_epochs = 5
     scheduler = optim.lr_scheduler.CosineAnnealingLR(opt, num_epochs, eta_min=0.001)
-
-
 
     scheduler.step()
     model.train()
     with tqdm(train_loader) as tq:
+        item_idx = 0
         for centers_A, centers_B, segments_A, segments_B, match_mask_ground_truth in tq:
             # segments_A = [segment.to(dev) for segment in segments_A]
             # segments_B = [segment.to(dev) for segment in segments_B]
@@ -203,11 +234,36 @@ if True:
                 'keypoints1': centers_B.to(dev),
             }
 
-            superglue(data)
-            print(data)
+            match_output = superglue(data)
 
-            loss = -data['score'].log() * match_mask_ground_truth
+
+            loss = -match_output['scores'] * match_mask_ground_truth.to(dev)
+            loss = loss.sum()
+
+            loss.backward()
             opt.step()
+
+            print("loss: {}".format(loss))
+
+            # TODO: evaluate accuracy
+            metrics = compute_metrics(match_output['matches0'], match_output['matches1'], match_mask_ground_truth)
+            print("accuracies: matches0({}), matches1({})".format(metrics['matches0_acc'], metrics['matches1_acc']))
+            print("precisions: matches0({}), matches1({})".format(metrics['matches0_precision'], metrics['matches1_precision']))
+            print("recalls: matches0({}), matches1({})".format(metrics['matches0_recall'], metrics['matches1_recall']))
+
+
+            # torch.save(model.state_dict(), args.save_model_path)
+
+            item_idx += 1
+            if item_idx % 200 == 0:
+                # TODO: save weight file
+                torch.save(model.state_dict(), os.path.join(DATA_DIR, "model.pth"))
+                torch.save(superglue.state_dict(), os.path.join(DATA_DIR, "superglue.pth"))
+                print("model weights saved in {}".format(DATA_DIR))
+
+            # TODO: draw a curve to supervise
+            # TODO: increase the complexity of descriptor learning model
+
 
 def main():
     pass

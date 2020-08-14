@@ -203,7 +203,7 @@ class SuperGlue(nn.Module):
         'keypoint_encoder': [32, 64, 128, 256],
         'GNN_layers': ['self', 'cross'] * 9,
         'sinkhorn_iterations': 100,
-        'match_threshold': 0.2,
+        'match_threshold': 0.05,
     }
 
     def __init__(self, config):
@@ -288,8 +288,8 @@ class SuperGlue(nn.Module):
         indices1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
 
         return {
-            # 'matches0': indices0, # use -1 for invalid match
-            # 'matches1': indices1, # use -1 for invalid match
+            'matches0': indices0, # use -1 for invalid match
+            'matches1': indices1, # use -1 for invalid match
             # 'matching_scores0': mscores0,
             # 'matching_scores1': mscores1,
             'scores': scores

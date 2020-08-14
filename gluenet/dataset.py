@@ -63,7 +63,7 @@ class GlueNetDataset(Dataset):
             } for correspondence in correspondences_all]
 
         correspondences_train, correspondences_test = train_test_split(correspondences_all, test_size=0.8,
-                                                                       random_state=1)
+                                                                       random_state=1, shuffle=True)
 
         if mode == 'train':
             self.correspondences = correspondences_train
