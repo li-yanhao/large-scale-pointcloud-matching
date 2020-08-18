@@ -23,10 +23,11 @@ def create_submap_dataset(h5file: h5py.File):
         center_submap_xy /= num_points
         # segments = [np.array(segment - np.hstack([center_submap_xy, 0.])) for segment in segments]
         segment_centers = np.array([segment.mean(axis=0) - np.hstack([center_submap_xy, 0.]) for segment in segments])
-        segments = [np.array(segment - segment.mean(axis=0)) for segment in segments]
 
         submap_dict['segment_centers'] = torch.Tensor(segment_centers)
-        submap_dict['segments'] = [torch.Tensor(segment) for segment in segments]
+        submap_dict['segment_scales'] = torch.Tensor(np.array([np.sqrt(segment.var(axis=0)) for segment in segments]))
+        submap_dict['segments'] = [torch.Tensor((segment - segment.mean(axis=0)) / np.sqrt(segment.var(axis=0))) for segment in segments]
+
         dataset[submap_name] = submap_dict
 
     return dataset
@@ -42,11 +43,16 @@ def make_match_mask_ground_truth(ids_A: np.ndarray, ids_B: np.ndarray, size_A: i
 
     return torch.Tensor(match_mask_ground_truth)
 
-def random_rotate(points):
-    # points: N*3
-    # rotation matrix: 3*3
+
+def random_rotate(points : torch.Tensor):
+    # points: N*3, torch.Tensor
     rotation_matrix = R.from_rotvec((-np.pi / 3 + np.random.ranf() * 2 * np.pi / 3) * np.array([0, 0, 1])).as_matrix()
     return points @ torch.Tensor(rotation_matrix.transpose())
+
+
+def rotate_by_matrix(vectors : torch.Tensor, rotation_matrix : torch.Tensor):
+    return vectors @ rotation_matrix.transpose(0, 1)
+
 
 class GlueNetDataset(Dataset):
     def __init__(self, submap_filename: str, correspondences_filename: str, mode):
@@ -94,9 +100,15 @@ class GlueNetDataset(Dataset):
 
         match_mask_ground_truth = make_match_mask_ground_truth(segment_id_pairs[0], segment_id_pairs[1], len(segments_A),
                                                             len(segments_B))
+        # create a random rotation matrix
+        rotation_matrix = torch.Tensor(R.from_rotvec((-np.pi / 3 + np.random.ranf() * 2 * np.pi / 3) * np.array([0, 0, 1])).as_matrix())
+        segment_centers_A = rotate_by_matrix(self.dataset[submap_A_name]['segment_centers'], rotation_matrix)
+        segment_scales_A = rotate_by_matrix(self.dataset[submap_A_name]['segment_scales'], rotation_matrix)
+        segment_centers_B = self.dataset[submap_B_name]['segment_centers']
+        segment_scales_B = self.dataset[submap_B_name]['segment_scales']
 
-        return random_rotate(self.dataset[submap_A_name]['segment_centers']), \
-               self.dataset[submap_B_name]['segment_centers'], \
+        return torch.cat([segment_centers_A, segment_scales_A], dim=1), \
+               torch.cat([segment_centers_B, segment_scales_B], dim=1), \
                self.dataset[submap_A_name]['segments'], self.dataset[submap_B_name]['segments'], \
                match_mask_ground_truth
 

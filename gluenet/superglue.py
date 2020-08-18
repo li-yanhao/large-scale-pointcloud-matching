@@ -74,7 +74,7 @@ class KeypointEncoder(nn.Module):
     """ Joint encoding of visual appearance and location using MLPs"""
     def __init__(self, feature_dim, layers):
         super().__init__()
-        self.encoder = MLP([3] + layers + [feature_dim])
+        self.encoder = MLP([6] + layers + [feature_dim])
         nn.init.constant_(self.encoder[-1].bias, 0.0)
 
     # def forward(self, kpts, scores):

@@ -252,9 +252,9 @@ if RUN_PIPELINE:
 
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    descriptor_dim = 128
+    descriptor_dim = 256
     # model = DescripNet(k=10, in_dim=3, emb_dims=[64, 128, 128, 512], out_dim=descriptor_dim) # TODO: debug here
-    model = DgcnnModel(k=5, feature_dims=[64, 128, 256], emb_dims=[256, 128], output_classes=descriptor_dim)
+    model = DgcnnModel(k=5, feature_dims=[64, 128, 256], emb_dims=[512, 256], output_classes=descriptor_dim)
     model = model.to(dev)
     model.load_state_dict(torch.load(os.path.join(DATA_DIR, "model-dgcnn.pth"), map_location=dev))
 
@@ -265,13 +265,13 @@ if RUN_PIPELINE:
         'keypoint_encoder': [32, 64, 128],
         'GNN_layers': ['self', 'cross'] * 6,
         'sinkhorn_iterations': 150,
-        'match_threshold': 0.02,
+        'match_threshold': 0.1,
     }
     superglue = SuperGlue(super_glue_config)
     superglue = superglue.to(dev)
     superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue-dgcnn.pth"), map_location=dev))
 
-    opt = optim.Adam(list(model.parameters()) + list(superglue.parameters()), lr=1e-4, weight_decay=1e-6)
+    opt = optim.Adam(list(model.parameters()) + list(superglue.parameters()), lr=1e-4, weight_decay=5e-6)
     num_epochs = 5
     scheduler = optim.lr_scheduler.CosineAnnealingLR(opt, num_epochs, eta_min=0.001)
 
