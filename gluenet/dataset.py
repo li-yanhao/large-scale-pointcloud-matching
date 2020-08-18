@@ -4,7 +4,7 @@ import json
 from sklearn.model_selection import train_test_split
 import numpy as np
 import torch
-
+from scipy.spatial.transform import Rotation as R
 
 def create_submap_dataset(h5file: h5py.File):
     dataset = {}
@@ -42,6 +42,11 @@ def make_match_mask_ground_truth(ids_A: np.ndarray, ids_B: np.ndarray, size_A: i
 
     return torch.Tensor(match_mask_ground_truth)
 
+def random_rotate(points):
+    # points: N*3
+    # rotation matrix: 3*3
+    rotation_matrix = R.from_rotvec((-np.pi / 3 + np.random.ranf() * 2 * np.pi / 3) * np.array([0, 0, 1])).as_matrix()
+    return points @ torch.Tensor(rotation_matrix.transpose())
 
 class GlueNetDataset(Dataset):
     def __init__(self, submap_filename: str, correspondences_filename: str, mode):
@@ -90,7 +95,8 @@ class GlueNetDataset(Dataset):
         match_mask_ground_truth = make_match_mask_ground_truth(segment_id_pairs[0], segment_id_pairs[1], len(segments_A),
                                                             len(segments_B))
 
-        return self.dataset[submap_A_name]['segment_centers'], self.dataset[submap_B_name]['segment_centers'],\
+        return random_rotate(self.dataset[submap_A_name]['segment_centers']), \
+               self.dataset[submap_B_name]['segment_centers'], \
                self.dataset[submap_A_name]['segments'], self.dataset[submap_B_name]['segments'], \
                match_mask_ground_truth
 
