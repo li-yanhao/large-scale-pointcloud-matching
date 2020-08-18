@@ -15,6 +15,7 @@ from gluenet.dataset import GlueNetDataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import os
+import visdom
 
 DATA_DIR = '/media/admini/My_data/0629'
 
@@ -276,6 +277,12 @@ if RUN_PIPELINE:
 
     scheduler.step()
     model.train()
+
+    viz = visdom.Visdom()
+    win_loss = viz.scatter(X=np.asarray([[0, 0]]))
+    win_precision = viz.scatter(X=np.asarray([[0, 0]]))
+    win_recall = viz.scatter(X=np.asarray([[0, 0]]))
+
     with tqdm(train_loader) as tq:
         item_idx = 0
         for centers_A, centers_B, segments_A, segments_B, match_mask_ground_truth in tq:
@@ -322,8 +329,18 @@ if RUN_PIPELINE:
             print("precisions: matches0({}), matches1({})".format(metrics['matches0_precision'], metrics['matches1_precision']))
             print("recalls: matches0({}), matches1({})".format(metrics['matches0_recall'], metrics['matches1_recall']))
 
-
-            # torch.save(model.state_dict(), args.save_model_path)
+            viz.scatter(X=np.array([[item_idx, float(loss)]]),
+                        name="train-loss",
+                        win=win_loss,
+                        update="append")
+            viz.scatter(X=np.array([[item_idx, float(metrics['matches0_precision'])]]),
+                        name="train-precision",
+                        win=win_precision,
+                        update="append")
+            viz.scatter(X=np.array([[item_idx, float(metrics['matches0_recall'])]]),
+                        name="train-recall",
+                        win=win_recall,
+                        update="append")
 
             item_idx += 1
             if item_idx % 200 == 0:
