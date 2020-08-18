@@ -90,3 +90,24 @@ def draw_list_of_clouds(clouds : list):
         i = i + 1
         pcd_viewed.colors.extend(np.repeat(color, result.shape[0], axis=0))
     o3d.visualization.draw_geometries([pcd_viewed])
+
+import h5py
+DOWNSAMPLE_FOR_H5 = True
+if DOWNSAMPLE_FOR_H5:
+    h5file = h5py.File("/media/admini/My_data/0629/submap_segments.h5", 'r')
+    h5file_downsampled = h5py.File("/media/admini/My_data/0629/submap_segments_downsampled.h5", 'w')
+    for submap_name in h5file.keys():
+        grp = h5file_downsampled.create_group(submap_name)
+        grp.create_dataset("num_segments", data=np.array(h5file[submap_name + '/num_segments']))
+        num_segments = np.array(h5file[submap_name + '/num_segments'])[0]
+        for i in range(num_segments):
+            # submap_dict[segment_name] = np.array(h5file[submap_name + '/num_segments'])
+            segment_name = submap_name + '/segment_' + str(i)
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(np.array(h5file[segment_name]))
+            pcd_downsampled = pcd.voxel_down_sample(0.05)
+            segment = np.asarray(pcd_downsampled.points)
+            grp.create_dataset('segment_' + str(i), data=segment)
+    h5file_downsampled.flush()
+
+

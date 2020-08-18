@@ -130,7 +130,7 @@ if MODEL_UNIT_TEST:
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # model = DescripNet(k=10, in_dim=6, emb_dims=[32, 64, 64, 512], out_dim=64)
-    model = DgcnnModel(k=10, feature_dims=[64, 128, 256], emb_dims=[512, 512, 256], output_classes=256)
+    model = DgcnnModel(k=10, feature_dims=[64, 128, 512], emb_dims=[256, 256], output_classes=256)
     opt = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=1e-4)
     model = model.to(dev)
 
@@ -251,26 +251,26 @@ if RUN_PIPELINE:
 
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    descriptor_dim = 256
-    model = DescripNet(k=10, in_dim=3, emb_dims=[64, 128, 128, 512], out_dim=descriptor_dim) # TODO: debug here
-    # model = DgcnnModel(k=10, feature_dims=[64, 128, 512], emb_dims=[256], output_classes=descriptor_dim)
+    descriptor_dim = 128
+    # model = DescripNet(k=10, in_dim=3, emb_dims=[64, 128, 128, 512], out_dim=descriptor_dim) # TODO: debug here
+    model = DgcnnModel(k=5, feature_dims=[64, 128, 256], emb_dims=[256, 128], output_classes=descriptor_dim)
     model = model.to(dev)
-    model.load_state_dict(torch.load(os.path.join(DATA_DIR, "model.pth"), map_location=dev))
+    model.load_state_dict(torch.load(os.path.join(DATA_DIR, "model-dgcnn.pth"), map_location=dev))
 
 
     super_glue_config = {
         'descriptor_dim': descriptor_dim,
         'weights': '',
-        'keypoint_encoder': [32, 64, 128, 256],
-        'GNN_layers': ['self', 'cross'] * 9,
-        'sinkhorn_iterations': 100,
-        'match_threshold': 0.01,
+        'keypoint_encoder': [32, 64, 128],
+        'GNN_layers': ['self', 'cross'] * 6,
+        'sinkhorn_iterations': 150,
+        'match_threshold': 0.02,
     }
     superglue = SuperGlue(super_glue_config)
     superglue = superglue.to(dev)
-    superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue.pth"), map_location=dev))
+    superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue-dgcnn.pth"), map_location=dev))
 
-    opt = optim.Adam(list(model.parameters()) + list(superglue.parameters()), lr=5e-5, weight_decay=2e-6)
+    opt = optim.Adam(list(model.parameters()) + list(superglue.parameters()), lr=1e-4, weight_decay=1e-6)
     num_epochs = 5
     scheduler = optim.lr_scheduler.CosineAnnealingLR(opt, num_epochs, eta_min=0.001)
 
@@ -291,11 +291,11 @@ if RUN_PIPELINE:
             # for i in range(len(segments_B)):
             #     descriptors_B.append(model(segment, dev))
             for segment in segments_A:
-                descriptors_A.append(model(segment.to(dev), dev))
-                # descriptors_A.append(model(segment.to(dev)))
+                # descriptors_A.append(model(segment.to(dev), dev))
+                descriptors_A.append(model(segment.to(dev)))
             for segment in segments_B:
-                descriptors_B.append(model(segment.to(dev), dev))
-                # descriptors_B.append(model(segment.to(dev)))
+                # descriptors_B.append(model(segment.to(dev), dev))
+                descriptors_B.append(model(segment.to(dev)))
             descriptors_A = torch.cat(descriptors_A, dim=0).transpose(0, 1).reshape(1, descriptor_dim, -1)
             descriptors_B = torch.cat(descriptors_B, dim=0).transpose(0, 1).reshape(1, descriptor_dim, -1)
             data = {
@@ -328,8 +328,8 @@ if RUN_PIPELINE:
             item_idx += 1
             if item_idx % 200 == 0:
                 # TODO: save weight file
-                torch.save(model.state_dict(), os.path.join(DATA_DIR, "model.pth"))
-                torch.save(superglue.state_dict(), os.path.join(DATA_DIR, "superglue.pth"))
+                torch.save(model.state_dict(), os.path.join(DATA_DIR, "model-dgcnn.pth"))
+                torch.save(superglue.state_dict(), os.path.join(DATA_DIR, "superglue-dgcnn.pth"))
                 print("model weights saved in {}".format(DATA_DIR))
 
             # TODO: draw a curve to supervise
