@@ -8,14 +8,13 @@ from scipy.spatial.transform import Rotation as R
 
 def create_submap_dataset(h5file: h5py.File):
     dataset = {}
-    center_submap_xy = torch.Tensor([0., 0.])
-    num_points = 0
     for submap_name in h5file.keys():
         submap_dict = {}
         submap_dict['num_segments'] = np.array(h5file[submap_name + '/num_segments'])[0]
         segments = []
+        center_submap_xy = torch.Tensor([0., 0.])
+        num_points = 0
         for i in range(submap_dict['num_segments']):
-            # submap_dict[segment_name] = np.array(h5file[submap_name + '/num_segments'])
             segment_name = submap_name + '/segment_' + str(i)
             segments.append(np.array(h5file[segment_name]))
             center_submap_xy += segments[-1].sum(axis=0)[:2]
@@ -46,7 +45,7 @@ def make_match_mask_ground_truth(ids_A: np.ndarray, ids_B: np.ndarray, size_A: i
 
 def random_rotate(points : torch.Tensor):
     # points: N*3, torch.Tensor
-    rotation_matrix = R.from_rotvec((-np.pi / 3 + np.random.ranf() * 2 * np.pi / 3) * np.array([0, 0, 1])).as_matrix()
+    rotation_matrix = R.from_rotvec((-np.pi / 1 + np.random.ranf() * 2 * np.pi / 1) * np.array([0, 0, 1])).as_matrix()
     return points @ torch.Tensor(rotation_matrix.transpose())
 
 
@@ -64,18 +63,17 @@ class GlueNetDataset(Dataset):
         self.num_submaps = len(h5_file.keys())
 
         self.dataset = create_submap_dataset(h5_file)
-
-        with open(correspondences_filename) as f:
-            correspondences_all = json.load(f)['correspondences']
-            correspondences_all = [{
-                'submap_pair': correspondence['submap_pair'].split(','),
-                'segment_pairs': np.array(list(map(int, correspondence['segment_pairs'].split(',')[:-1]))).reshape(-1,
-                                                                                                                   2).transpose(),
-            } for correspondence in correspondences_all]
+        f = open(correspondences_filename, 'r')
+        correspondences_all = json.load(f)['correspondences']
+        correspondences_all = [{
+            'submap_pair': correspondence['submap_pair'].split(','),
+            'segment_pairs': np.array(list(map(int, correspondence['segment_pairs'].split(',')[:-1]))).reshape(-1,
+                                                                                                               2).transpose(),
+        } for correspondence in correspondences_all]
 
         correspondences_train, correspondences_test = train_test_split(correspondences_all, test_size=0.5,
                                                                        random_state=1, shuffle=True)
-
+        f.close()
         if mode == 'train':
             self.correspondences = correspondences_train
         if mode == 'test':
@@ -85,32 +83,33 @@ class GlueNetDataset(Dataset):
         return len(self.correspondences)
 
     def __getitem__(self, i):
-
         correspondence = self.correspondences[i]
         submap_ids = correspondence['submap_pair']
         submap_A_name = 'submap_' + submap_ids[0]
         submap_B_name = 'submap_' + submap_ids[1]
+        print("submaps {} and {}".format(submap_ids[0], submap_ids[1]))
 
         # segment_id_pairs = list(map(int, correspondence['segment_pairs'].split(',')[:-1])) # remove the last empty string
         # segment_id_pairs = np.array(segment_id_pairs).reshape(-1, 2).transpose()
 
         segment_id_pairs = correspondence['segment_pairs']
-        segments_A = self.dataset[submap_A_name]['segments']
+        # create a random rotation matrix
+        rotation_matrix = torch.Tensor(
+            R.from_rotvec((-np.pi / 3 + np.random.ranf() * 2 * np.pi / 3) * np.array([0, 0, 1])).as_matrix())
+
+        segments_A = [rotate_by_matrix(segment, rotation_matrix) for segment in self.dataset[submap_A_name]['segments']]
         segments_B = self.dataset[submap_B_name]['segments']
 
         match_mask_ground_truth = make_match_mask_ground_truth(segment_id_pairs[0], segment_id_pairs[1], len(segments_A),
                                                             len(segments_B))
-        # create a random rotation matrix
-        rotation_matrix = torch.Tensor(R.from_rotvec((-np.pi / 3 + np.random.ranf() * 2 * np.pi / 3) * np.array([0, 0, 1])).as_matrix())
+
         segment_centers_A = rotate_by_matrix(self.dataset[submap_A_name]['segment_centers'], rotation_matrix)
         segment_scales_A = rotate_by_matrix(self.dataset[submap_A_name]['segment_scales'], rotation_matrix)
         segment_centers_B = self.dataset[submap_B_name]['segment_centers']
         segment_scales_B = self.dataset[submap_B_name]['segment_scales']
-
         return torch.cat([segment_centers_A, segment_scales_A], dim=1), \
                torch.cat([segment_centers_B, segment_scales_B], dim=1), \
-               self.dataset[submap_A_name]['segments'], self.dataset[submap_B_name]['segments'], \
-               match_mask_ground_truth
+               segments_A, segments_B, match_mask_ground_truth
 
 if __name__ == "__main__":
     h5_filename = "/home/li/Documents/submap_segments.h5"

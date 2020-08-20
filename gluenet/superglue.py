@@ -55,7 +55,7 @@ def MLP(channels: list, do_bn=True):
             nn.Conv1d(channels[i - 1], channels[i], kernel_size=1, bias=True))
         if i < (n-1):
             if do_bn:
-                layers.append(nn.BatchNorm1d(channels[i]))
+                layers.append(nn.BatchNorm1d(channels[i], track_running_stats=True))
             layers.append(nn.ReLU())
     return nn.Sequential(*layers)
 
@@ -281,7 +281,7 @@ class SuperGlue(nn.Module):
         mutual1 = arange_like(indices1, 1)[None] == indices0.gather(1, indices1)
         zero = scores.new_tensor(0)
         mscores0 = torch.where(mutual0, max0.values.exp(), zero)
-        mscores1 = torch.where(mutual1, mscores0.gather(1, indices1), zero)
+        # mscores1 = torch.where(mutual1, mscores0.gather(1, indices1), zero)
         valid0 = mutual0 & (mscores0 > self.config['match_threshold'])
         valid1 = mutual1 & valid0.gather(1, indices1)
         indices0 = torch.where(valid0, indices0, indices0.new_tensor(-1))

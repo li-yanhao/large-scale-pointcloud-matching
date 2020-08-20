@@ -38,7 +38,7 @@ class DescripNet(nn.Module):
             self.conv.append(EdgeConv(
                 emb_dims[i - 1] if i > 0 else in_dim,
                 emb_dims[i],
-                batch_norm=True)
+                batch_norm=False)
             )
         # self.conv.append(self.global_attention_pooling)
 
@@ -117,7 +117,7 @@ class DgcnnModel(nn.Module):
             h = self.embs[i](h)
             # h = self.bn_embs[i](h)
             h = F.leaky_relu(h, 0.2)
-            h = self.dropouts[i](h)
+            # h = self.dropouts[i](h)
 
         h = self.proj_output(h)
         return h
@@ -189,169 +189,282 @@ def compute_metrics(matches0, matches1, match_matrix_ground_truth):
     return metrics
 
 
+if __name__ == "__main__":
+    if False:
+        super_glue_config = {
+            'descriptor_dim': 256,
+            'weights': '',
+            'keypoint_encoder': [32, 64, 128, 256],
+            'GNN_layers': ['self', 'cross'] * 9,
+            'sinkhorn_iterations': 100,
+            'match_threshold': 0.2,
+        }
 
-if False:
-    super_glue_config = {
-        'descriptor_dim': 256,
-        'weights': '',
-        'keypoint_encoder': [32, 64, 128, 256],
-        'GNN_layers': ['self', 'cross'] * 9,
-        'sinkhorn_iterations': 100,
-        'match_threshold': 0.2,
-    }
+        dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        superglue = SuperGlue(super_glue_config)
 
-    dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    superglue = SuperGlue(super_glue_config)
+        n0 = 500
+        n1 = 400
+        d = 256
+        W = 800
+        H = 600
+        L = 3
+        x_for_superglue = {
+            'descriptors0': torch.Tensor(np.random.randn(1, d, n0)).to(dev), # 1 * d * n
+            'keypoints0': torch.Tensor(np.random.randn(1, n0, 3)).to(dev), # 1 * n * 3
+            'descriptors1': torch.Tensor(np.random.randn(1, d, n1)).to(dev), # 1 * d * n
+            'keypoints1': torch.Tensor(np.random.randn(1, n1, 3)).to(dev), # 1 * n * 3
+            'image0': torch.Tensor(np.random.randn(1, 1, H, W, L)).to(dev), # 1 * 1 * H * W
+            'image1': torch.Tensor(np.random.randn(1, 1, H, W, L)).to(dev), # 1 * 1 * H * W
+            'scores0': torch.Tensor(np.random.randn(1, n0)).to(dev), # 1 * n
+            'scores1': torch.Tensor(np.random.randn(1, n1)).to(dev) # 1 * n
+        }
 
-    n0 = 500
-    n1 = 400
-    d = 256
-    W = 800
-    H = 600
-    L = 3
-    x_for_superglue = {
-        'descriptors0': torch.Tensor(np.random.randn(1, d, n0)).to(dev), # 1 * d * n
-        'keypoints0': torch.Tensor(np.random.randn(1, n0, 3)).to(dev), # 1 * n * 3
-        'descriptors1': torch.Tensor(np.random.randn(1, d, n1)).to(dev), # 1 * d * n
-        'keypoints1': torch.Tensor(np.random.randn(1, n1, 3)).to(dev), # 1 * n * 3
-        'image0': torch.Tensor(np.random.randn(1, 1, H, W, L)).to(dev), # 1 * 1 * H * W
-        'image1': torch.Tensor(np.random.randn(1, 1, H, W, L)).to(dev), # 1 * 1 * H * W
-        'scores0': torch.Tensor(np.random.randn(1, n0)).to(dev), # 1 * n
-        'scores1': torch.Tensor(np.random.randn(1, n1)).to(dev) # 1 * n
-    }
+    # torch.Size([1, 988, 2])
+    # torch.Size([1, 988])
+    # torch.Size([1, 256, 988])
+    # torch.Size([1, 1, 480, 640])
+    # torch.Size([1, 1, 480, 640])
+    # torch.Size([1, 988, 2])
+    # torch.Size([1, 988])
+    # torch.Size([1, 256, 988])
 
-# torch.Size([1, 988, 2])
-# torch.Size([1, 988])
-# torch.Size([1, 256, 988])
-# torch.Size([1, 1, 480, 640])
-# torch.Size([1, 1, 480, 640])
-# torch.Size([1, 988, 2])
-# torch.Size([1, 988])
-# torch.Size([1, 256, 988])
-
-    superglue.train().to(dev)
-    y_for_superglue = superglue(x_for_superglue)
-
-
-    print(y_for_superglue)
-    for key in y_for_superglue:
-        print(key, y_for_superglue[key].shape)
-    # matches0 torch.Size([1, 500])
-    # matches1 torch.Size([1, 400])
-    # matching_scores0 torch.Size([1, 500])
-    # matching_scores1 torch.Size([1, 400])
+        superglue.train().to(dev)
+        y_for_superglue = superglue(x_for_superglue)
 
 
-RUN_PIPELINE = True
-if RUN_PIPELINE:
-    h5_filename = os.path.join(DATA_DIR, "submap_segments_downsampled.h5")
-    correspondences_filename = os.path.join(DATA_DIR, "correspondences.json")
-    gluenet_dataset = GlueNetDataset(h5_filename, correspondences_filename, mode='train')
-
-    train_loader = DataLoader(gluenet_dataset, batch_size=1, shuffle=True)
-
-    dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    descriptor_dim = 256
-    # model = DescripNet(k=10, in_dim=3, emb_dims=[64, 128, 128, 512], out_dim=descriptor_dim) # TODO: debug here
-    model = DgcnnModel(k=5, feature_dims=[64, 128, 256], emb_dims=[512, 256], output_classes=descriptor_dim)
-    model = model.to(dev)
-    model.load_state_dict(torch.load(os.path.join(DATA_DIR, "model-dgcnn.pth"), map_location=dev))
+        print(y_for_superglue)
+        for key in y_for_superglue:
+            print(key, y_for_superglue[key].shape)
+        # matches0 torch.Size([1, 500])
+        # matches1 torch.Size([1, 400])
+        # matching_scores0 torch.Size([1, 500])
+        # matching_scores1 torch.Size([1, 400])
 
 
-    super_glue_config = {
-        'descriptor_dim': descriptor_dim,
-        'weights': '',
-        'keypoint_encoder': [32, 64, 128],
-        'GNN_layers': ['self', 'cross'] * 6,
-        'sinkhorn_iterations': 150,
-        'match_threshold': 0.1,
-    }
-    superglue = SuperGlue(super_glue_config)
-    superglue = superglue.to(dev)
-    superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue-dgcnn.pth"), map_location=dev))
+    RUN_TRAINING = True
+    if RUN_TRAINING:
+        h5_filename = os.path.join(DATA_DIR, "submap_segments_downsampled.h5")
+        correspondences_filename = os.path.join(DATA_DIR, "correspondences.json")
+        gluenet_dataset = GlueNetDataset(h5_filename, correspondences_filename, mode='train')
 
-    opt = optim.Adam(list(model.parameters()) + list(superglue.parameters()), lr=1e-4, weight_decay=5e-6)
-    num_epochs = 5
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(opt, num_epochs, eta_min=0.001)
+        train_loader = DataLoader(gluenet_dataset, batch_size=1, shuffle=True)
 
-    scheduler.step()
-    model.train()
+        dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    viz = visdom.Visdom()
-    win_loss = viz.scatter(X=np.asarray([[0, 0]]))
-    win_precision = viz.scatter(X=np.asarray([[0, 0]]))
-    win_recall = viz.scatter(X=np.asarray([[0, 0]]))
-
-    with tqdm(train_loader) as tq:
-        item_idx = 0
-        for centers_A, centers_B, segments_A, segments_B, match_mask_ground_truth in tq:
-            # segments_A = [segment.to(dev) for segment in segments_A]
-            # segments_B = [segment.to(dev) for segment in segments_B]
-            # descriptors_A = torch.Tensor.new_empty(1, 256, len(segments_A), device=dev)
-            # descriptors_B = torch.Tensor.new_empty(1, 256, len(segments_B), device=dev)
-            descriptors_A = []
-            descriptors_B = []
-            opt.zero_grad()
-            # for i in range(len(segments_A)):
-            #     descriptors_A[0, :, i] = model(segments_A[i], dev)
-            # for i in range(len(segments_B)):
-            #     descriptors_B.append(model(segment, dev))
-            for segment in segments_A:
-                # descriptors_A.append(model(segment.to(dev), dev))
-                descriptors_A.append(model(segment.to(dev)))
-            for segment in segments_B:
-                # descriptors_B.append(model(segment.to(dev), dev))
-                descriptors_B.append(model(segment.to(dev)))
-            descriptors_A = torch.cat(descriptors_A, dim=0).transpose(0, 1).reshape(1, descriptor_dim, -1)
-            descriptors_B = torch.cat(descriptors_B, dim=0).transpose(0, 1).reshape(1, descriptor_dim, -1)
-            data = {
-                'descriptors0': descriptors_A,
-                'descriptors1': descriptors_B,
-                'keypoints0': centers_A.to(dev),
-                'keypoints1': centers_B.to(dev),
-            }
-
-            match_output = superglue(data)
+        descriptor_dim = 256
+        # model = DescripNet(k=10, in_dim=3, emb_dims=[64, 128, 128, 512], out_dim=descriptor_dim) # TODO: debug here
+        model = DgcnnModel(k=5, feature_dims=[64, 128, 256], emb_dims=[512, 256], output_classes=descriptor_dim)
+        model = model.to(dev)
+        model.load_state_dict(torch.load(os.path.join(DATA_DIR, "model-dgcnn-no-dropout.pth"), map_location=dev))
 
 
-            loss = -match_output['scores'] * match_mask_ground_truth.to(dev)
-            loss = loss.sum()
+        super_glue_config = {
+            'descriptor_dim': descriptor_dim,
+            'weights': '',
+            'keypoint_encoder': [32, 64, 128],
+            'GNN_layers': ['self', 'cross'] * 6,
+            'sinkhorn_iterations': 150,
+            'match_threshold': 0.2,
+        }
+        superglue = SuperGlue(super_glue_config)
+        superglue = superglue.to(dev)
 
-            loss.backward()
-            opt.step()
+        superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue-dgcnn-no-dropout.pth"), map_location=dev))
 
-            print("loss: {}".format(loss))
+        opt = optim.Adam(list(model.parameters()) + list(superglue.parameters()), lr=1e-4, weight_decay=2e-6)
+        num_epochs = 5
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(opt, num_epochs, eta_min=0.001)
 
-            # TODO: evaluate accuracy
-            metrics = compute_metrics(match_output['matches0'], match_output['matches1'], match_mask_ground_truth)
-            print("accuracies: matches0({}), matches1({})".format(metrics['matches0_acc'], metrics['matches1_acc']))
-            print("precisions: matches0({}), matches1({})".format(metrics['matches0_precision'], metrics['matches1_precision']))
-            print("recalls: matches0({}), matches1({})".format(metrics['matches0_recall'], metrics['matches1_recall']))
-
-            viz.scatter(X=np.array([[item_idx, float(loss)]]),
-                        name="train-loss",
-                        win=win_loss,
-                        update="append")
-            viz.scatter(X=np.array([[item_idx, float(metrics['matches0_precision'])]]),
-                        name="train-precision",
-                        win=win_precision,
-                        update="append")
-            viz.scatter(X=np.array([[item_idx, float(metrics['matches0_recall'])]]),
-                        name="train-recall",
-                        win=win_recall,
-                        update="append")
-
-            item_idx += 1
-            if item_idx % 200 == 0:
-                # TODO: save weight file
-                torch.save(model.state_dict(), os.path.join(DATA_DIR, "model-dgcnn.pth"))
-                torch.save(superglue.state_dict(), os.path.join(DATA_DIR, "superglue-dgcnn.pth"))
-                print("model weights saved in {}".format(DATA_DIR))
-
-            # TODO: draw a curve to supervise
-            # TODO: increase the complexity of descriptor learning model
+        # scheduler.step()
+        model.train()
+        superglue.train()
 
 
-def main():
-    pass
+        viz = visdom.Visdom()
+        win_loss = viz.scatter(X=np.asarray([[0, 0]]))
+        win_precision = viz.scatter(X=np.asarray([[0, 0]]))
+        win_recall = viz.scatter(X=np.asarray([[0, 0]]))
+
+        with tqdm(train_loader) as tq:
+            item_idx = 0
+            for centers_A, centers_B, segments_A, segments_B, match_mask_ground_truth in tq:
+                # segments_A = [segment.to(dev) for segment in segments_A]
+                # segments_B = [segment.to(dev) for segment in segments_B]
+                # descriptors_A = torch.Tensor.new_empty(1, 256, len(segments_A), device=dev)
+                # descriptors_B = torch.Tensor.new_empty(1, 256, len(segments_B), device=dev)
+                descriptors_A = []
+                descriptors_B = []
+                opt.zero_grad()
+                # for i in range(len(segments_A)):
+                #     descriptors_A[0, :, i] = model(segments_A[i], dev)
+                # for i in range(len(segments_B)):
+                #     descriptors_B.append(model(segment, dev))
+                for segment in segments_A:
+                    # descriptors_A.append(model(segment.to(dev), dev))
+                    descriptors_A.append(model(segment.to(dev)))
+                for segment in segments_B:
+                    # descriptors_B.append(model(segment.to(dev), dev))
+                    descriptors_B.append(model(segment.to(dev)))
+                descriptors_A = torch.cat(descriptors_A, dim=0).transpose(0, 1).reshape(1, descriptor_dim, -1)
+                descriptors_B = torch.cat(descriptors_B, dim=0).transpose(0, 1).reshape(1, descriptor_dim, -1)
+                data = {
+                    'descriptors0': descriptors_A,
+                    'descriptors1': descriptors_B,
+                    'keypoints0': centers_A.to(dev),
+                    'keypoints1': centers_B.to(dev),
+                }
+
+                match_output = superglue(data)
+
+
+                loss = -match_output['scores'] * match_mask_ground_truth.to(dev)
+                loss = loss.sum()
+
+                loss.backward()
+                opt.step()
+
+                print("loss: {}".format(loss))
+
+                # TODO: evaluate accuracy
+                metrics = compute_metrics(match_output['matches0'], match_output['matches1'], match_mask_ground_truth)
+                print("accuracies: matches0({}), matches1({})".format(metrics['matches0_acc'], metrics['matches1_acc']))
+                print("precisions: matches0({}), matches1({})".format(metrics['matches0_precision'], metrics['matches1_precision']))
+                print("recalls: matches0({}), matches1({})".format(metrics['matches0_recall'], metrics['matches1_recall']))
+
+                viz.scatter(X=np.array([[item_idx, float(loss)]]),
+                            name="train-loss",
+                            win=win_loss,
+                            update="append")
+                viz.scatter(X=np.array([[item_idx, float(metrics['matches0_precision'])]]),
+                            name="train-precision",
+                            win=win_precision,
+                            update="append")
+                viz.scatter(X=np.array([[item_idx, float(metrics['matches0_recall'])]]),
+                            name="train-recall",
+                            win=win_recall,
+                            update="append")
+
+                item_idx += 1
+                if item_idx % 200 == 0:
+                    # TODO: save weight file
+                    torch.save(model.state_dict(), os.path.join(DATA_DIR, "model-dgcnn-no-dropout.pth"))
+                    torch.save(superglue.state_dict(), os.path.join(DATA_DIR, "superglue-dgcnn-no-dropout.pth"))
+                    print("model weights saved in {}".format(DATA_DIR))
+
+                # TODO: draw a curve to supervise
+                # TODO: increase the complexity of descriptor learning model
+
+
+    RUN_EVALUATION = False
+    if RUN_EVALUATION:
+        h5_filename = os.path.join(DATA_DIR, "submap_segments_downsampled.h5")
+        correspondences_filename = os.path.join(DATA_DIR, "correspondences.json")
+        gluenet_dataset = GlueNetDataset(h5_filename, correspondences_filename, mode='test')
+
+        train_loader = DataLoader(gluenet_dataset, batch_size=1, shuffle=True)
+
+        dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        descriptor_dim = 256
+        # model = DescripNet(k=10, in_dim=3, emb_dims=[64, 128, 128, 512], out_dim=descriptor_dim) # TODO: debug here
+        model = DgcnnModel(k=5, feature_dims=[64, 128, 256], emb_dims=[512, 256], output_classes=descriptor_dim)
+        model.load_state_dict(torch.load(os.path.join(DATA_DIR, "model-dgcnn-no-dropout.pth"), map_location=torch.device('cpu')))
+
+
+        super_glue_config = {
+            'descriptor_dim': descriptor_dim,
+            'weights': '',
+            'keypoint_encoder': [32, 64, 128],
+            'GNN_layers': ['self', 'cross'] * 6,
+            'sinkhorn_iterations': 150,
+            'match_threshold': 0.1,
+        }
+        superglue = SuperGlue(super_glue_config)
+        superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue-dgcnn-no-dropout.pth"), map_location=dev))
+
+        model.train()
+        superglue.train()
+        model = model.to(dev)
+        superglue = superglue.to(dev)
+
+        viz = visdom.Visdom()
+        win_loss = viz.scatter(X=np.asarray([[0, 0]]))
+        win_precision = viz.scatter(X=np.asarray([[0, 0]]))
+        win_recall = viz.scatter(X=np.asarray([[0, 0]]))
+
+        losses = []
+        precisions = []
+        recalls = []
+
+        with torch.no_grad():
+            with tqdm(train_loader) as tq:
+                item_idx = 0
+                for centers_A, centers_B, segments_A, segments_B, match_mask_ground_truth in tq:
+                    # segments_A = [segment.to(dev) for segment in segments_A]
+                    # segments_B = [segment.to(dev) for segment in segments_B]
+                    # descriptors_A = torch.Tensor.new_empty(1, 256, len(segments_A), device=dev)
+                    # descriptors_B = torch.Tensor.new_empty(1, 256, len(segments_B), device=dev)
+                    descriptors_A = []
+                    descriptors_B = []
+                    # for i in range(len(segments_A)):
+                    #     descriptors_A[0, :, i] = model(segments_A[i], dev)
+                    # for i in range(len(segments_B)):
+                    #     descriptors_B.append(model(segment, dev))
+                    for segment in segments_A:
+                        # descriptors_A.append(model(segment.to(dev), dev))
+                        descriptors_A.append(model(segment.to(dev)))
+                    for segment in segments_B:
+                        # descriptors_B.append(model(segment.to(dev), dev))
+                        descriptors_B.append(model(segment.to(dev)))
+                    descriptors_A = torch.cat(descriptors_A, dim=0).transpose(0, 1).reshape(1, descriptor_dim, -1)
+                    descriptors_B = torch.cat(descriptors_B, dim=0).transpose(0, 1).reshape(1, descriptor_dim, -1)
+                    data = {
+                        'descriptors0': descriptors_A,
+                        'descriptors1': descriptors_B,
+                        'keypoints0': centers_A.to(dev),
+                        'keypoints1': centers_B.to(dev),
+                    }
+
+                    match_output = superglue(data)
+
+                    loss = -match_output['scores'] * match_mask_ground_truth.to(dev)
+                    loss = loss.sum()
+
+
+                    print("loss: {}".format(loss))
+
+                    # TODO: evaluate accuracy
+                    metrics = compute_metrics(match_output['matches0'], match_output['matches1'], match_mask_ground_truth)
+                    print("accuracies: matches0({}), matches1({})".format(metrics['matches0_acc'], metrics['matches1_acc']))
+                    print("precisions: matches0({}), matches1({})".format(metrics['matches0_precision'],
+                                                                          metrics['matches1_precision']))
+                    print("recalls: matches0({}), matches1({})".format(metrics['matches0_recall'], metrics['matches1_recall']))
+
+                    viz.scatter(X=np.array([[item_idx, float(loss)]]),
+                                name="train-loss",
+                                win=win_loss,
+                                update="append")
+                    viz.scatter(X=np.array([[item_idx, float(metrics['matches0_precision'])]]),
+                                name="train-precision",
+                                win=win_precision,
+                                update="append")
+                    viz.scatter(X=np.array([[item_idx, float(metrics['matches0_recall'])]]),
+                                name="train-recall",
+                                win=win_recall,
+                                update="append")
+
+                    losses.append(float(loss))
+                    precisions.append(metrics['matches0_precision'])
+                    recalls.append(metrics['matches0_recall'])
+
+
+                    item_idx += 1
+                    if item_idx % 200 == 0:
+                        print("average loss: {}".format(np.array(losses).mean()))
+                        print("average precision: {}".format(np.array(precisions).mean()))
+                        print("average recall: {}".format(np.array(recalls).mean()))
+
+            print("average loss: {}".format(np.array(losses).mean()))
+            print("average precision: {}".format(np.array(precisions).mean()))
+            print("average recall: {}".format(np.array(recalls).mean()))
