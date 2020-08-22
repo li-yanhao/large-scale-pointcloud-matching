@@ -242,7 +242,7 @@ if __name__ == "__main__":
         # matching_scores1 torch.Size([1, 400])
 
 
-    RUN_TRAINING = True
+    RUN_TRAINING = False
     if RUN_TRAINING:
         h5_filename = os.path.join(DATA_DIR, "submap_segments_downsampled.h5")
         correspondences_filename = os.path.join(DATA_DIR, "correspondences.json")
@@ -285,6 +285,7 @@ if __name__ == "__main__":
         win_loss = viz.scatter(X=np.asarray([[0, 0]]))
         win_precision = viz.scatter(X=np.asarray([[0, 0]]))
         win_recall = viz.scatter(X=np.asarray([[0, 0]]))
+
 
         with tqdm(train_loader) as tq:
             item_idx = 0
@@ -356,7 +357,7 @@ if __name__ == "__main__":
                 # TODO: increase the complexity of descriptor learning model
 
 
-    RUN_EVALUATION = False
+    RUN_EVALUATION = True
     if RUN_EVALUATION:
         h5_filename = os.path.join(DATA_DIR, "submap_segments_downsampled.h5")
         correspondences_filename = os.path.join(DATA_DIR, "correspondences.json")

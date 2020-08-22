@@ -32,8 +32,8 @@ def make_submap_dict(h5file : h5py.File, submap_id : int):
     segments = []
     center_submap_xy = torch.Tensor([0., 0.])
     num_points = 0
-    translation = np.array([50, 50, 0])
-    rotation_matrix = R.from_rotvec((-np.pi / 4 + np.random.ranf() * 2 * np.pi / 4) * np.array([0, 0, 1])).as_matrix()
+    translation = np.array([20, 20, 0])
+    rotation_matrix = R.from_rotvec((-np.pi / 6 + np.random.ranf() * 2 * np.pi / 6) * np.array([0, 0, 1])).as_matrix()
     for i in range(submap_dict['num_segments']):
         # submap_dict[segment_name] = np.array(h5file[submap_name + '/num_segments'])
         segment_name = submap_name + '/segment_' + str(i)
@@ -49,7 +49,7 @@ def make_submap_dict(h5file : h5py.File, submap_id : int):
     submap_dict['segment_scales'] = torch.Tensor(np.array([np.sqrt(segment.var(axis=0)) for segment in segments]))
     submap_dict['segments'] = [torch.Tensor((segment - segment.mean(axis=0)) / np.sqrt(segment.var(axis=0))) for segment
                                in segments]
-    submap_dict['segments_original'] = [(segment - np.hstack([center_submap_xy, 0.])) for segment
+    submap_dict['segments_original'] = [segment for segment
                                in segments]
     return submap_dict
 
@@ -125,7 +125,9 @@ def visualize_match_result(submap_dict_A, submap_dict_B, match_result, segment_p
     num_segments_B = submap_dict_B['segment_centers'].shape[0]
     translation_offset_for_visualize = np.array([0, 0, 30])
     # draw correspondence lines
-    points = np.vstack([np.array(submap_dict_A['segment_centers']), np.array(submap_dict_B['segment_centers']) + translation_offset_for_visualize])
+    points = np.vstack([np.array([segment_original.mean(axis=0) for segment_original in submap_dict_A["segments_original"]]),
+                       np.array([segment_original.mean(axis=0) for segment_original in submap_dict_B["segments_original"]])
+                       + translation_offset_for_visualize])
     lines = []
     line_labels = []
 
@@ -190,8 +192,8 @@ def visualize_match_result(submap_dict_A, submap_dict_B, match_result, segment_p
     line_set.colors = o3d.utility.Vector3dVector(color_lines)
     o3d.visualization.draw_geometries([pcd_A, pcd_B, line_set])
 
-submap_id_A = 231
-submap_id_B = 348
+submap_id_A = 15
+submap_id_B = 295
 
 correspondences = load_correspondences(correspondences_filename)
 segment_pairs_ground_truth = [correspondence for correspondence in correspondences if correspondence["submap_pair"]==(str(submap_id_A) + ',' + str(submap_id_B))][0]['segment_pairs']
