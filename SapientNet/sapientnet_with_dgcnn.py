@@ -10,12 +10,12 @@ import torch.optim as optim
 from dgl.nn.pytorch import KNNGraph, EdgeConv
 from dgl.nn.pytorch.glob import GlobalAttentionPooling
 
-from gluenet.superglue import SuperGlue
-from gluenet.dataset import GlueNetDataset
+from superglue import SuperGlue
+from dataset import GlueNetDataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import os
-import visdom
+# import visdom
 
 DATA_DIR = '/media/admini/My_data/0629'
 

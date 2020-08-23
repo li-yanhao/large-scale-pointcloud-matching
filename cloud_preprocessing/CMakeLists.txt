@@ -58,5 +58,9 @@ target_link_libraries (bird_view_poi ${PCL_LIBRARIES})
 add_executable (ground_filtering ground_filtering.cpp)
 target_link_libraries (ground_filtering ${PCL_LIBRARIES} )
 
+add_executable (ground_removal ground_removal.cpp)
+target_link_libraries (ground_removal ${PCL_LIBRARIES} )
+
+
 add_executable (json_tutorial json_tutorial.cpp)
 # target_link_libraries (json_tutorial ${PCL_LIBRARIES})

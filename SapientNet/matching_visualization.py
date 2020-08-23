@@ -1,9 +1,15 @@
 
+import sys
+import os
+sys.path.append(os.path.dirname(__file__))
+print(sys.path)
+
 import numpy as np
 import torch
-from gluenet.superglue import SuperGlue
-import os
-from gluenet.gluenet_with_dgcnn import DgcnnModel
+# from SapientNet.superglue import SuperGlue
+from superglue import SuperGlue
+
+from sapientnet_with_dgcnn import DgcnnModel
 import open3d as o3d
 import matplotlib.pyplot as plt
 import h5py
@@ -11,7 +17,8 @@ from scipy.spatial.transform import Rotation as R
 import json
 
 
-DATA_DIR = '/media/admini/My_data/0629'
+# DATA_DIR = '/media/admini/My_data/0629'
+DATA_DIR = '/home/li/wayz'
 h5_filename = os.path.join(DATA_DIR, "submap_segments_downsampled.h5")
 correspondences_filename = os.path.join(DATA_DIR, "correspondences.json")
 
@@ -57,9 +64,9 @@ def make_submap_dict(h5file : h5py.File, submap_id : int):
 def match_pipeline(submap_dict_A : dict, submap_dict_B : dict):
     # h5_filename = os.path.join(DATA_DIR, "submap_segments_downsampled.h5")
     # correspondences_filename = os.path.join(DATA_DIR, "correspondences.json")
-    # gluenet_dataset = GlueNetDataset(h5_filename, correspondences_filename, mode='test')
+    # sapientnet_dataset = SapientNetDataset(h5_filename, correspondences_filename, mode='test')
 
-    # train_loader = DataLoader(gluenet_dataset, batch_size=1, shuffle=True)
+    # train_loader = DataLoader(sapientnet_dataset, batch_size=1, shuffle=True)
 
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -120,7 +127,7 @@ def match_pipeline(submap_dict_A : dict, submap_dict_B : dict):
         return match_output
 
 
-def visualize_match_result(submap_dict_A, submap_dict_B, match_result, segment_pairs_ground_truth):
+def visualize_match_result(submap_dict_A, submap_dict_B, match_result, segment_pairs_ground_truth = np.array([[], []])):
     num_segments_A = submap_dict_A['segment_centers'].shape[0]
     num_segments_B = submap_dict_B['segment_centers'].shape[0]
     translation_offset_for_visualize = np.array([0, 0, 30])
@@ -150,7 +157,10 @@ def visualize_match_result(submap_dict_A, submap_dict_B, match_result, segment_p
         pcd_B.points.extend(o3d.utility.Vector3dVector(np.array(segment)[:, :3] + translation_offset_for_visualize))
     labels_B = np.array(labels_B)
 
-    matches_A_to_B = np.array(match_result['matches0'].cpu()).reshape(-1)
+    if isinstance(match_result['matches0'], torch.Tensor):
+        matches_A_to_B = np.array(match_result['matches0'].cpu()).reshape(-1)
+    else:
+        matches_A_to_B = match_result['matches0'].reshape(-1)
     for label_A in range(len(matches_A_to_B)):
         label_B = matches_A_to_B[label_A] + label_B_offest
 
@@ -192,19 +202,125 @@ def visualize_match_result(submap_dict_A, submap_dict_B, match_result, segment_p
     line_set.colors = o3d.utility.Vector3dVector(color_lines)
     o3d.visualization.draw_geometries([pcd_A, pcd_B, line_set])
 
-submap_id_A = 15
-submap_id_B = 295
 
-correspondences = load_correspondences(correspondences_filename)
-segment_pairs_ground_truth = [correspondence for correspondence in correspondences if correspondence["submap_pair"]==(str(submap_id_A) + ',' + str(submap_id_B))][0]['segment_pairs']
-
-h5_file = h5py.File(h5_filename, 'r')
-submap_dict_A = make_submap_dict(h5_file, submap_id_A)
-submap_dict_B = make_submap_dict(h5_file, submap_id_B)
-
-match_result = match_pipeline(submap_dict_A, submap_dict_B)
-visualize_match_result(submap_dict_A, submap_dict_B, match_result, segment_pairs_ground_truth)
 
 
 
 # TODO: RANSAC matching
+
+# TODO: pipeline [pcd_A0, ..., pcd_Am] & [pcd_B0, ..., pcd_Bm] => SapientNet input => SapientNet result => RANSAC result => ICP matching => final pcd
+
+def make_submap_dict_from_pcds(segment_pcds : list, add_random_bias = False):
+    submap_dict = {}
+    segments = []
+    center_submap_xy = torch.Tensor([0., 0.])
+    num_points = 0
+    translation = np.array([5, 5, 0])
+    for pcd in segment_pcds:
+        if add_random_bias:
+            segment = np.array(pcd.points) + translation
+        else:
+            segment = np.array(pcd.points)
+        segments.append(segment)
+        center_submap_xy += segment.sum(axis=0)[:2]
+        num_points += segment.shape[0]
+    center_submap_xy /= num_points
+    segment_centers = np.array([segment.mean(axis=0) - np.hstack([center_submap_xy, 0.]) for segment in segments])
+
+    submap_dict['segment_centers'] = torch.Tensor(segment_centers)
+    submap_dict['segment_scales'] = torch.Tensor(np.array([np.sqrt(segment.var(axis=0)) for segment in segments]))
+    submap_dict['segments'] = [torch.Tensor((segment - segment.mean(axis=0)) / np.sqrt(segment.var(axis=0))) for segment
+                               in segments]
+    submap_dict['segments_original'] = segments
+    return submap_dict
+
+
+def best_rigid_transform(data, ref):
+    '''
+    Computes the least-squares best-fit transform that maps corresponding points data to ref.
+    Inputs :
+        data = (N * d) matrix where "N" is the number of points and "d" the dimension
+         ref = (N * d) matrix where "N" is the number of points and "d" the dimension
+    Returns :
+           R = (d x d) rotation matrix
+           T = (d) translation vector
+           Such that R * data + T is aligned on ref
+    '''
+    barycenter_ref = np.mean(ref, axis=0)
+    barycenter_data = np.mean(data, axis=0)
+
+    Q_ref = ref - barycenter_ref
+    Q_data = data - barycenter_data
+    H = Q_data.T.dot(Q_ref)
+    U, S, V = np.linalg.svd(H)
+    R = V.T.dot(U.T)
+    if np.linalg.det(R) < 0:
+        U[:, -1] = -U[:, -1]
+        R = V.T.dot(U.T)
+    T = barycenter_ref - R.dot(barycenter_data)
+
+    return R, T
+
+
+def ransac_filter(submap_dict_A : dict, submap_dict_B : dict, match_result):
+    matches_A_to_B = np.array(match_result['matches0'].cpu()).reshape(-1)
+    correspondences_valid = np.vstack([np.where(matches_A_to_B > -1), matches_A_to_B[matches_A_to_B > -1]])
+    centers_A = np.array(submap_dict_A["segment_centers"][correspondences_valid[0]].cpu())
+    centers_B = np.array(submap_dict_B["segment_centers"][correspondences_valid[1]].cpu())
+    num_matches = correspondences_valid.shape[1]
+    n, k = 5000, 4
+    selections = np.random.choice(num_matches, (n, k), replace=True)
+
+    score = -99999
+    R_best, T_best= None, None
+    MAX_DISTANCE = 2
+    selection_best = None
+    for selection in selections:
+        R, T = best_rigid_transform(centers_A[selection, :], centers_B[selection, :])
+        # centers_aligned_A = R.dot(centers_A[idx_A, :]) + T
+        diff = centers_A @ R.T + T - centers_B
+        distances_squared = np.sum(diff[:, :2] * diff[:, :2], axis=1)
+
+        if score < (distances_squared < MAX_DISTANCE**2).sum():
+            R_best, T_best = R, T
+            # score = np.sum(diff * diff, axis=1).mean()
+            score = (distances_squared < MAX_DISTANCE**2).sum()
+            selection_best = np.where(distances_squared < MAX_DISTANCE**2)
+            # selection_best = selection
+    matches0_amended = np.ones(match_result["matches0"].reshape(-1).shape[0]) * (-1)
+    matches0_amended[correspondences_valid[0, selection_best]] = correspondences_valid[1, selection_best]
+    match_result_amended = {"matches0": matches0_amended}
+
+    return match_result_amended
+
+
+if __name__ == "__main__":
+    if False:
+        submap_id_A = 15
+        submap_id_B = 295
+
+        correspondences = load_correspondences(correspondences_filename)
+        segment_pairs_ground_truth = [correspondence for correspondence in correspondences if
+                                      correspondence["submap_pair"] == (str(submap_id_A) + ',' + str(submap_id_B))][0][
+            'segment_pairs']
+
+        h5_file = h5py.File(h5_filename, 'r')
+        submap_dict_A = make_submap_dict(h5_file, submap_id_A)
+        submap_dict_B = make_submap_dict(h5_file, submap_id_B)
+
+        match_result = match_pipeline(submap_dict_A, submap_dict_B)
+        visualize_match_result(submap_dict_A, submap_dict_B, match_result, segment_pairs_ground_truth)
+
+    if True:
+        SUBMAP_A_DIR = "/home/li/study/intelligent-vehicles/cooper-AR/large-scale-pointcloud-matching/cloud_preprocessing/build/submap_A"
+        SUBMAP_B_DIR = "/home/li/study/intelligent-vehicles/cooper-AR/large-scale-pointcloud-matching/cloud_preprocessing/build/submap_B"
+        pcds_A = [o3d.io.read_point_cloud(os.path.join(SUBMAP_A_DIR, file_name)) for file_name in os.listdir(SUBMAP_A_DIR)]
+        pcds_B = [o3d.io.read_point_cloud(os.path.join(SUBMAP_B_DIR, file_name)) for file_name in os.listdir(SUBMAP_B_DIR)]
+        submap_dict_A = make_submap_dict_from_pcds(pcds_A, add_random_bias=True)
+        submap_dict_B = make_submap_dict_from_pcds(pcds_B)
+
+        match_result = match_pipeline(submap_dict_A, submap_dict_B)
+        match_result_amended = ransac_filter(submap_dict_A, submap_dict_B, match_result)
+
+        visualize_match_result(submap_dict_A, submap_dict_B, match_result)
+        visualize_match_result(submap_dict_A, submap_dict_B, match_result_amended)

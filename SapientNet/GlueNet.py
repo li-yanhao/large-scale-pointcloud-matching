@@ -10,8 +10,8 @@ import torch.optim as optim
 from dgl.nn.pytorch import KNNGraph, EdgeConv
 from dgl.nn.pytorch.glob import GlobalAttentionPooling
 
-from gluenet.superglue import SuperGlue
-from gluenet.dataset import GlueNetDataset
+from SapientNet.superglue import SuperGlue
+from SapientNet.dataset import GlueNetDataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import os
@@ -245,9 +245,9 @@ RUN_PIPELINE = True
 if RUN_PIPELINE:
     h5_filename = os.path.join(DATA_DIR, "submap_segments_downsampled.h5")
     correspondences_filename = os.path.join(DATA_DIR, "correspondences.json")
-    gluenet_dataset = GlueNetDataset(h5_filename, correspondences_filename, mode='train')
+    sapientnet_dataset = SapientNetDataset(h5_filename, correspondences_filename, mode='train')
 
-    train_loader = DataLoader(gluenet_dataset, batch_size=1, shuffle=True)
+    train_loader = DataLoader(sapientnet_dataset, batch_size=1, shuffle=True)
 
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
