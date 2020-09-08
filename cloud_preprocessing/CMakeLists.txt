@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.12 FATAL_ERROR)
 project(region_growing_rgb_segmentation)
 
 
-find_package(PCL 1.5 REQUIRED)
+find_package(PCL 1.7 REQUIRED)
 find_package(HDF5 REQUIRED COMPONENTS C CXX)
 
 set(CMAKE_CXX_STANDARD 14)
@@ -11,6 +11,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 SET(CMAKE_BUILD_TYPE "Release")
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 
+message(STATUS "PCL_INCLUDE_DIRS:" ${PCL_INCLUDE_DIRS})
+message(STATUS "PCL_LIBRARY_DIRS:" ${PCL_LIBRARY_DIRS})
+message(STATUS "PCL_DEFINITIONS:" ${PCL_DEFINITIONS})
 
 include_directories(
   ./
@@ -31,6 +34,7 @@ add_definitions(${PCL_DEFINITIONS})
 
 # add_library(descriptors descriptors.h)
 # target_link_libraries (descriptors ${PCL_LIBRARIES})
+
 
 add_executable (region_growing_rgb_segmentation region_growing_rgb_segmentation.cpp)
 target_link_libraries (region_growing_rgb_segmentation ${PCL_LIBRARIES})
@@ -64,3 +68,9 @@ target_link_libraries (ground_removal ${PCL_LIBRARIES} )
 
 add_executable (json_tutorial json_tutorial.cpp)
 # target_link_libraries (json_tutorial ${PCL_LIBRARIES})
+
+add_executable (merge_clouds merge_clouds.cpp)
+target_link_libraries (merge_clouds ${PCL_LIBRARIES} )
+
+add_executable(segmatch_to_pcds segmatch_to_pcds.cpp)
+target_link_libraries (segmatch_to_pcds ${PCL_LIBRARIES} )

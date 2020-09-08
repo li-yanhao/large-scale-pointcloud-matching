@@ -17,8 +17,8 @@ from scipy.spatial.transform import Rotation as R
 import json
 
 
-# DATA_DIR = '/media/admini/My_data/0629'
-DATA_DIR = '/home/li/wayz'
+DATA_DIR = '/media/admini/My_data/0629'
+# DATA_DIR = '/home/li/wayz'
 h5_filename = os.path.join(DATA_DIR, "submap_segments_downsampled.h5")
 correspondences_filename = os.path.join(DATA_DIR, "correspondences.json")
 
@@ -81,7 +81,7 @@ def match_pipeline(submap_dict_A : dict, submap_dict_B : dict):
         'keypoint_encoder': [32, 64, 128],
         'GNN_layers': ['self', 'cross'] * 6,
         'sinkhorn_iterations': 150,
-        'match_threshold': 0.2,
+        'match_threshold': 0.1,
     }
     superglue = SuperGlue(super_glue_config)
     superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue-dgcnn-no-dropout.pth"), map_location=dev))
@@ -128,6 +128,7 @@ def match_pipeline(submap_dict_A : dict, submap_dict_B : dict):
 
 
 def visualize_match_result(submap_dict_A, submap_dict_B, match_result, segment_pairs_ground_truth = np.array([[], []])):
+
     num_segments_A = submap_dict_A['segment_centers'].shape[0]
     num_segments_B = submap_dict_B['segment_centers'].shape[0]
     translation_offset_for_visualize = np.array([0, 0, 30])
@@ -138,14 +139,14 @@ def visualize_match_result(submap_dict_A, submap_dict_B, match_result, segment_p
     lines = []
     line_labels = []
 
-    pcd_A = o3d.geometry.PointCloud()
-    pcd_B = o3d.geometry.PointCloud()
+    pcd_target = o3d.geometry.PointCloud()
+    pcd_source = o3d.geometry.PointCloud()
     label = 0
     labels_A = []
     for segment in submap_dict_A['segments_original']:
         labels_A += [label] * segment.shape[0]
         label += 1
-        pcd_A.points.extend(o3d.utility.Vector3dVector(np.array(segment)[:, :3]))
+        pcd_target.points.extend(o3d.utility.Vector3dVector(np.array(segment)[:, :3]))
     labels_A = np.array(labels_A)
 
     label_B_offest = num_segments_A
@@ -154,7 +155,7 @@ def visualize_match_result(submap_dict_A, submap_dict_B, match_result, segment_p
     for segment in submap_dict_B['segments_original']:
         labels_B += [label] * segment.shape[0]
         label += 1
-        pcd_B.points.extend(o3d.utility.Vector3dVector(np.array(segment)[:, :3] + translation_offset_for_visualize))
+        pcd_source.points.extend(o3d.utility.Vector3dVector(np.array(segment)[:, :3] + translation_offset_for_visualize))
     labels_B = np.array(labels_B)
 
     if isinstance(match_result['matches0'], torch.Tensor):
@@ -178,13 +179,13 @@ def visualize_match_result(submap_dict_A, submap_dict_B, match_result, segment_p
     max_label = labels_A.max()
     labels_B[labels_B > max_label] = -1
 
-    colors_A = plt.get_cmap("tab20")(labels_A / (max_label if max_label > 0 else 1))
-    colors_A[labels_A < 0] = 0
-    pcd_A.colors = o3d.utility.Vector3dVector(colors_A[:, :3])
+    # colors_source = plt.get_cmap("tab20")(labels_A / (max_label if max_label > 0 else 1))
+    # colors_source[labels_A < 0] = 0
+    # pcd_target.colors = o3d.utility.Vector3dVector(colors_source[:, :3])
 
     colors_B = plt.get_cmap("tab20")(labels_B / (max_label if max_label > 0 else 1))
     colors_B[labels_B < 0] = 0
-    pcd_B.colors = o3d.utility.Vector3dVector(colors_B[:, :3])
+    pcd_source.colors = o3d.utility.Vector3dVector(colors_B[:, :3])
 
     line_set = o3d.geometry.LineSet(
         points=o3d.utility.Vector3dVector(points),
@@ -200,10 +201,27 @@ def visualize_match_result(submap_dict_A, submap_dict_B, match_result, segment_p
         else:
             color_lines.append([1, 0, 0])
     line_set.colors = o3d.utility.Vector3dVector(color_lines)
-    o3d.visualization.draw_geometries([pcd_A, pcd_B, line_set])
+
+    SEGMENTS_BG_DIR = "/media/admini/My_data/0721/juxin/segments"
 
 
+    # segments = [np.array(o3d.io.read_point_cloud(os.path.join(SEGMENTS_BG_DIR, file_name)).points) for file_name in os.listdir(SEGMENTS_BG_DIR)]
+    # segments = np.vstack(segments)
 
+    LARGE_SCALE_VISUALIZATION = True
+    if LARGE_SCALE_VISUALIZATION:
+        pcd_bg = o3d.geometry.PointCloud()
+        for file_name in os.listdir(SEGMENTS_BG_DIR):
+            pcd_bg.points.extend(o3d.io.read_point_cloud(os.path.join(SEGMENTS_BG_DIR, file_name)).points)
+        pcd_bg.paint_uniform_color([0.5, 0.5, 0.5])
+        pcd_target.paint_uniform_color([0.5, 0.5, 0.5])
+        line_set.paint_uniform_color([0, 1, 0])
+        o3d.visualization.draw_geometries([pcd_bg, pcd_target, pcd_source, line_set])
+    else:
+        o3d.visualization.draw_geometries([pcd_target, pcd_source, line_set])
+    # o3d.io.write_line_set("correspondence_lines.pcd", line_set, write_ascii=True)
+    # o3d.io.write_point_cloud("pcd_target.pcd", pcd_target, write_ascii=True)
+    # o3d.io.write_point_cloud("pcd_source.pcd", pcd_source, write_ascii=True)
 
 
 # TODO: RANSAC matching
@@ -216,9 +234,10 @@ def make_submap_dict_from_pcds(segment_pcds : list, add_random_bias = False):
     center_submap_xy = torch.Tensor([0., 0.])
     num_points = 0
     translation = np.array([5, 5, 0])
+    rotation_matrix = R.from_rotvec((-np.pi / 18 + np.random.ranf() * 2 * np.pi / 18) * np.array([0, 0, 1])).as_matrix()
     for pcd in segment_pcds:
         if add_random_bias:
-            segment = np.array(pcd.points) + translation
+            segment = np.array(pcd.points) @ rotation_matrix + translation
         else:
             segment = np.array(pcd.points)
         segments.append(segment)
@@ -268,7 +287,7 @@ def ransac_filter(submap_dict_A : dict, submap_dict_B : dict, match_result):
     centers_A = np.array(submap_dict_A["segment_centers"][correspondences_valid[0]].cpu())
     centers_B = np.array(submap_dict_B["segment_centers"][correspondences_valid[1]].cpu())
     num_matches = correspondences_valid.shape[1]
-    n, k = 5000, 4
+    n, k = 10000, 4
     selections = np.random.choice(num_matches, (n, k), replace=True)
 
     score = -99999
@@ -293,6 +312,42 @@ def ransac_filter(submap_dict_A : dict, submap_dict_B : dict, match_result):
 
     return match_result_amended
 
+# each segment may correspond to k segments
+# not finished
+def ransac_filter_advance(submap_dict_A : dict, submap_dict_B : dict, match_result):
+    top_k_matches1 = np.array(match_result['top_k_matches1'].cpu()) # k * N
+    k, num_matches = top_k_matches1.shape
+
+    # correspondences_valid = np.vstack([np.where(matches_A_to_B > -1), matches_A_to_B[matches_A_to_B > -1]])
+    centers_A = np.array(submap_dict_A["segment_centers"].cpu())
+    centers_B = np.array(submap_dict_B["segment_centers"].cpu())
+    # num_matches = correspondences_valid.shape[1]
+
+    n, l = 5000, 4
+    selections_target = np.random.choice(num_matches, (n, l), replace=True)
+    selections_source = np.random.choice(k, (n, l), replace=True)
+
+    score = -99999
+    R_best, T_best= None, None
+    MAX_DISTANCE = 2
+    selection_best = None
+    for selection in selections:
+        R, T = best_rigid_transform(centers_A[selection, :], centers_B[selection, :])
+        # centers_aligned_A = R.dot(centers_A[idx_A, :]) + T
+        diff = centers_A @ R.T + T - centers_B
+        distances_squared = np.sum(diff[:, :2] * diff[:, :2], axis=1)
+
+        if score < (distances_squared < MAX_DISTANCE**2).sum():
+            R_best, T_best = R, T
+            # score = np.sum(diff * diff, axis=1).mean()
+            score = (distances_squared < MAX_DISTANCE**2).sum()
+            selection_best = np.where(distances_squared < MAX_DISTANCE**2)
+            # selection_best = selection
+    matches0_amended = np.ones(match_result["matches0"].reshape(-1).shape[0]) * (-1)
+    matches0_amended[correspondences_valid[0, selection_best]] = correspondences_valid[1, selection_best]
+    match_result_amended = {"matches0": matches0_amended}
+
+    return match_result_amended
 
 if __name__ == "__main__":
     if False:
@@ -312,15 +367,20 @@ if __name__ == "__main__":
         visualize_match_result(submap_dict_A, submap_dict_B, match_result, segment_pairs_ground_truth)
 
     if True:
-        SUBMAP_A_DIR = "/home/li/study/intelligent-vehicles/cooper-AR/large-scale-pointcloud-matching/cloud_preprocessing/build/submap_A"
-        SUBMAP_B_DIR = "/home/li/study/intelligent-vehicles/cooper-AR/large-scale-pointcloud-matching/cloud_preprocessing/build/submap_B"
-        pcds_A = [o3d.io.read_point_cloud(os.path.join(SUBMAP_A_DIR, file_name)) for file_name in os.listdir(SUBMAP_A_DIR)]
-        pcds_B = [o3d.io.read_point_cloud(os.path.join(SUBMAP_B_DIR, file_name)) for file_name in os.listdir(SUBMAP_B_DIR)]
-        submap_dict_A = make_submap_dict_from_pcds(pcds_A, add_random_bias=True)
+        # SUBMAP_A_DIR = "/home/li/study/intelligent-vehicles/cooper-AR/large-scale-pointcloud-matching/cloud_preprocessing/build/submap_A"
+        # SUBMAP_B_DIR = "/home/li/study/intelligent-vehicles/cooper-AR/large-scale-pointcloud-matching/cloud_preprocessing/build/submap_B"
+        # SEGMENTS_TARGET_DIR = "/home/admini/yanhao/large-scale-pointcloud-matching/cloud_preprocessing/build/submap_A"
+        # SEGMENTS_SOURCE_DIR = "/home/admini/yanhao/large-scale-pointcloud-matching/cloud_preprocessing/build/submap_B"
+
+        SEGMENTS_TARGET_DIR = "/media/admini/My_data/0721/juxin/tmp/segments_target"
+        SEGMENTS_SOURCE_DIR = "/media/admini/My_data/0721/juxin/tmp/segments_source"
+        pcds_A = [o3d.io.read_point_cloud(os.path.join(SEGMENTS_TARGET_DIR, file_name)) for file_name in os.listdir(SEGMENTS_TARGET_DIR)]
+        pcds_B = [o3d.io.read_point_cloud(os.path.join(SEGMENTS_SOURCE_DIR, file_name)) for file_name in os.listdir(SEGMENTS_SOURCE_DIR)]
+        submap_dict_A = make_submap_dict_from_pcds(pcds_A, add_random_bias=False)
         submap_dict_B = make_submap_dict_from_pcds(pcds_B)
 
         match_result = match_pipeline(submap_dict_A, submap_dict_B)
         match_result_amended = ransac_filter(submap_dict_A, submap_dict_B, match_result)
 
-        visualize_match_result(submap_dict_A, submap_dict_B, match_result)
+        # visualize_match_result(submap_dict_A, submap_dict_B, match_result)
         visualize_match_result(submap_dict_A, submap_dict_B, match_result_amended)

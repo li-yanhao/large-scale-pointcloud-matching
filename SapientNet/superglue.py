@@ -287,10 +287,13 @@ class SuperGlue(nn.Module):
         indices0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
         indices1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
 
+        # hard-code top k values
+        top_k_matches0 = scores[0, :-1, :-1].topk(5, dim=0).indices
         return {
             'matches0': indices0, # use -1 for invalid match
             'matches1': indices1, # use -1 for invalid match
             # 'matching_scores0': mscores0,
             # 'matching_scores1': mscores1,
-            'scores': scores
+            'scores': scores,
+            'top_k_matches1': top_k_matches0
         }
