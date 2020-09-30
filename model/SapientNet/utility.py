@@ -3,7 +3,7 @@ import torch
 import open3d as o3d
 import numpy as np
 
-def make_submap_dict_from_pcds(segment_pcds : list [o3d.geometry.PointCloud], add_random_bias = False):
+def make_submap_dict_from_pcds(segment_pcds : list [o3d.geometry.PointCloud], add_random_bias=False):
     submap_dict = {}
     segments = []
     center_submap_xy = torch.Tensor([0., 0.])
