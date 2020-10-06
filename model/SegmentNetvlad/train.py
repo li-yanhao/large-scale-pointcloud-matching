@@ -37,7 +37,7 @@ parser.add_argument('--saved_model_path', type=str, default='saved_model', help=
 # # parser.add_argument('--from_scratch', type=bool, default=True, help='from_scratch')
 # parser.add_argument('--pretrained_embedding', type=bool, default=True, help='pretrained_embedding')
 # parser.add_argument('--num_similar_neg', type=int, default=2, help='number of similar negative samples')
-parser.add_argument('--margin', type=float, default=0.1, help='margin')
+parser.add_argument('--margin', type=float, default=1.0, help='margin')
 parser.add_argument('--num_clusters', type=int, default=64, help='num_clusters')
 # parser.add_argument('--use_gpu', type=bool, default=True, help='use_gpu')
 parser.add_argument('--learning_rate', type=float, default=0.001, help='learning_rate')
@@ -120,6 +120,8 @@ def main():
                 loss = criterion(query_vlad.view(1, -1),positive_vlad.view(1, -1),negative_vlad.view(1, -1))
                 print("loss: {}".format(loss.item()))
                 loss.backward()
+
+                del query_vlad, positive_vlad, negative_vlad
 
 
             # for positive, negative in zip(positives, negatives):
