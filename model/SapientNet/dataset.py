@@ -71,6 +71,8 @@ class GlueNetDataset(Dataset):
                                                                                                                2).transpose(),
         } for correspondence in correspondences_all]
 
+        correspondences_all = [correspondence for correspondence in correspondences_all if correspondence['segment_pairs'].shape[1] > 5]
+
         correspondences_train, correspondences_test = train_test_split(correspondences_all, test_size=0.5,
                                                                        random_state=1, shuffle=True)
         f.close()

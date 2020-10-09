@@ -62,7 +62,7 @@ add_executable (segment_correspondences segment_correspondences.cpp)
 target_link_libraries (segment_correspondences ${PCL_LIBRARIES})
 
 add_executable (submap_correspondences submap_correspondences.cpp)
-target_link_libraries (submap_correspondences 
+target_link_libraries (submap_correspondences
   ${PCL_LIBRARIES} 
   # ${HDF5_CXX_LIBRARIES} 
   # ${HDF5_LIBRARIES}

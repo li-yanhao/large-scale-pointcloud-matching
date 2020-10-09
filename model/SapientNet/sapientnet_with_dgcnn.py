@@ -15,9 +15,9 @@ from dataset import GlueNetDataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import os
-# import visdom
+import visdom
 
-DATA_DIR = '/media/admini/My_data/0629'
+DATA_DIR = '/media/admini/My_data/submap_database/00'
 
 # DescripNet
 # input: points(Na, 3)
@@ -74,7 +74,7 @@ class DgcnnModel(nn.Module):
             self.conv.append(EdgeConv(
                 feature_dims[i - 1] if i > 0 else input_dims,
                 feature_dims[i],
-                batch_norm=True))
+                batch_norm=False))
 
         self.proj = nn.Linear(sum(feature_dims), emb_dims[0])
 
@@ -83,13 +83,14 @@ class DgcnnModel(nn.Module):
         self.dropouts = nn.ModuleList()
 
         self.num_embs = len(emb_dims) - 1
-        for i in range(1, self.num_embs + 1):
+        for i in range(self.num_embs):
             self.embs.append(nn.Linear(
                 # * 2 because of concatenation of max- and mean-pooling
-                emb_dims[i - 1] if i > 1 else (emb_dims[i - 1] * 2),
-                emb_dims[i]))
+                emb_dims[i] if i > 1 else (emb_dims[i]),
+                emb_dims[i+1])
+            )
             # self.bn_embs.append(nn.BatchNorm1d(emb_dims[i]))
-            self.dropouts.append(nn.Dropout(dropout_prob))
+            # self.dropouts.append(nn.Dropout(dropout_prob))
 
         self.proj_output = nn.Linear(emb_dims[-1], output_classes)
 
@@ -109,9 +110,10 @@ class DgcnnModel(nn.Module):
 
         h = torch.cat(hs, 2)
         h = self.proj(h)
-        h_max, _ = torch.max(h, 1)
+        # h_max, _ = torch.max(h, 1)
         h_avg = torch.mean(h, 1)
-        h = torch.cat([h_max, h_avg], 1)
+        h = h_avg
+        # h = torch.cat([h_max, h_avg], 1)
 
         for i in range(self.num_embs):
             h = self.embs[i](h)
@@ -242,10 +244,10 @@ if __name__ == "__main__":
         # matching_scores1 torch.Size([1, 400])
 
 
-    RUN_TRAINING = False
+    RUN_TRAINING = True
     if RUN_TRAINING:
-        h5_filename = os.path.join(DATA_DIR, "submap_segments_downsampled.h5")
-        correspondences_filename = os.path.join(DATA_DIR, "correspondences.json")
+        h5_filename = os.path.join(DATA_DIR, "submap_segments.h5")
+        correspondences_filename = os.path.join(DATA_DIR, "correspondences.txt")
         gluenet_dataset = GlueNetDataset(h5_filename, correspondences_filename, mode='train')
 
         train_loader = DataLoader(gluenet_dataset, batch_size=1, shuffle=True)
@@ -256,7 +258,7 @@ if __name__ == "__main__":
         # model = DescripNet(k=10, in_dim=3, emb_dims=[64, 128, 128, 512], out_dim=descriptor_dim) # TODO: debug here
         model = DgcnnModel(k=5, feature_dims=[64, 128, 256], emb_dims=[512, 256], output_classes=descriptor_dim)
         model = model.to(dev)
-        model.load_state_dict(torch.load(os.path.join(DATA_DIR, "model-dgcnn-no-dropout.pth"), map_location=dev))
+        # model.load_state_dict(torch.load(os.path.join(DATA_DIR, "model-dgcnn-no-dropout.pth"), map_location=dev))
 
 
         super_glue_config = {
@@ -270,7 +272,7 @@ if __name__ == "__main__":
         superglue = SuperGlue(super_glue_config)
         superglue = superglue.to(dev)
 
-        superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue-dgcnn-no-dropout.pth"), map_location=dev))
+        # superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue-dgcnn-kitti00.pth"), map_location=dev))
 
         opt = optim.Adam(list(model.parameters()) + list(superglue.parameters()), lr=1e-4, weight_decay=2e-6)
         num_epochs = 5
@@ -349,18 +351,18 @@ if __name__ == "__main__":
                 item_idx += 1
                 if item_idx % 200 == 0:
                     # TODO: save weight file
-                    torch.save(model.state_dict(), os.path.join(DATA_DIR, "model-dgcnn-no-dropout.pth"))
-                    torch.save(superglue.state_dict(), os.path.join(DATA_DIR, "superglue-dgcnn-no-dropout.pth"))
+                    torch.save(model.state_dict(), os.path.join(DATA_DIR, "model-dgcnn-kitti00.pth"))
+                    torch.save(superglue.state_dict(), os.path.join(DATA_DIR, "superglue-dgcnn-kitti00.pth"))
                     print("model weights saved in {}".format(DATA_DIR))
 
                 # TODO: draw a curve to supervise
                 # TODO: increase the complexity of descriptor learning model
 
 
-    RUN_EVALUATION = True
+    RUN_EVALUATION = False
     if RUN_EVALUATION:
         h5_filename = os.path.join(DATA_DIR, "submap_segments_downsampled.h5")
-        correspondences_filename = os.path.join(DATA_DIR, "correspondences.json")
+        correspondences_filename = os.path.join(DATA_DIR, "correspondences.txt")
         gluenet_dataset = GlueNetDataset(h5_filename, correspondences_filename, mode='test')
 
         train_loader = DataLoader(gluenet_dataset, batch_size=1, shuffle=True)
