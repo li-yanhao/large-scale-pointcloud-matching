@@ -55,7 +55,7 @@ def MLP(channels: list, do_bn=True):
             nn.Conv1d(channels[i - 1], channels[i], kernel_size=1, bias=True))
         if i < (n-1):
             if do_bn:
-                layers.append(nn.BatchNorm1d(channels[i]))
+                layers.append(nn.BatchNorm1d(channels[i], track_running_stats=True))
             layers.append(nn.ReLU())
     return nn.Sequential(*layers)
 
@@ -74,7 +74,7 @@ class KeypointEncoder(nn.Module):
     """ Joint encoding of visual appearance and location using MLPs"""
     def __init__(self, feature_dim, layers):
         super().__init__()
-        self.encoder = MLP([3] + layers + [feature_dim])
+        self.encoder = MLP([6] + layers + [feature_dim])
         nn.init.constant_(self.encoder[-1].bias, 0.0)
 
     # def forward(self, kpts, scores):
@@ -281,16 +281,19 @@ class SuperGlue(nn.Module):
         mutual1 = arange_like(indices1, 1)[None] == indices0.gather(1, indices1)
         zero = scores.new_tensor(0)
         mscores0 = torch.where(mutual0, max0.values.exp(), zero)
-        mscores1 = torch.where(mutual1, mscores0.gather(1, indices1), zero)
+        # mscores1 = torch.where(mutual1, mscores0.gather(1, indices1), zero)
         valid0 = mutual0 & (mscores0 > self.config['match_threshold'])
         valid1 = mutual1 & valid0.gather(1, indices1)
         indices0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
         indices1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
 
+        # hard-code top k values
+        top_k_matches0 = scores[0, :-1, :-1].topk(5, dim=0).indices
         return {
             'matches0': indices0, # use -1 for invalid match
             'matches1': indices1, # use -1 for invalid match
             # 'matching_scores0': mscores0,
             # 'matching_scores1': mscores1,
-            'scores': scores
+            'scores': scores,
+            'top_k_matches1': top_k_matches0
         }
