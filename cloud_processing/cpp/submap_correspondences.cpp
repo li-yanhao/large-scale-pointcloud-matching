@@ -1,6 +1,6 @@
 
 #include <pcl/io/pcd_io.h>
-// #include <pcl/filters/approximate_voxel_grid.h>
+#include <pcl/filters/approximate_voxel_grid.h>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/kdtree/kdtree.h>
 #include <pcl/search/impl/kdtree.hpp>
@@ -11,12 +11,25 @@
 #include "H5Cpp.h"
 #include <H5DataSet.h>
 
+#include "gflags/gflags.h"
+#include "glog/logging.h"
+
+#include "thread_pool.h"
+
 using namespace H5;
+
+// DEFINE_string("out_dir", "", "out_dir")
+DEFINE_string(h5filename, "", "h5filename");
+DEFINE_string(file_prefix, "", "out_dir + id + .pcd = filename");
+DEFINE_string(correspondence_filename, "", "correspondence_filename");
+DEFINE_int32(id_max, 0, "id_max");
+
 
 constexpr float kClusterTolerance = 0.8f; // unit: meter
 constexpr int kMinClusterSize = 100; // unit: (number of points)
+constexpr int kMaxClusterSize = 5000; // unit: (number of points)
 
-constexpr float kMaxInterSubmapDistance = 50.f; // unit: meter
+constexpr float kMaxInterSubmapDistance = 30.f; // unit: meter
 constexpr float kMaxInterSegmentDistance = 5.f; // unit: meter
 constexpr float kOverlapTolerance = 0.5f; // unit: meter
 constexpr float kMinInterSegmentOverlapRatio = 0.6f; // unit: none
@@ -24,7 +37,7 @@ constexpr float kMinInterSegmentOverlapRatio = 0.6f; // unit: none
 
 template<typename PointT>
 std::vector<typename pcl::PointCloud<PointT>::Ptr> 
-extract_segments(const typename pcl::PointCloud<PointT>::Ptr& cloud, float max_distance, int min_size);
+extract_segments(const typename pcl::PointCloud<PointT>::Ptr& cloud, float max_distance, int min_size, int max_size);
 
 template<typename PointT>
 pcl::PointXYZ calculate_center(const pcl::PointCloud<PointT>& cloud);
@@ -55,7 +68,7 @@ struct Submap {
     {
 
         std::vector<typename pcl::PointCloud<PointT>::Ptr> segment_clouds = 
-                extract_segments<PointT>(cloud, kClusterTolerance,kMinClusterSize);
+                extract_segments<PointT>(cloud, kClusterTolerance, kMinClusterSize, kMaxClusterSize);
         
         int segment_id = 0;
         for (const auto& segment_cloud : segment_clouds) {
@@ -182,7 +195,7 @@ Correspondence::Correspondence(const Submap<PointT>& submap_i, const Submap<Poin
 
 template<typename PointT>
 std::vector<typename pcl::PointCloud<PointT>::Ptr> 
-extract_segments(const typename pcl::PointCloud<PointT>::Ptr& cloud, float cluster_tolerance, int min_size)
+extract_segments(const typename pcl::PointCloud<PointT>::Ptr& cloud, float cluster_tolerance, int min_size, int max_size)
 {
     // Creating the KdTree object for the search method of the extraction
     typename pcl::search::KdTree<PointT>::Ptr tree(new pcl::search::KdTree<PointT>);
@@ -192,7 +205,7 @@ extract_segments(const typename pcl::PointCloud<PointT>::Ptr& cloud, float clust
 
     ec.setClusterTolerance (cluster_tolerance);
     ec.setMinClusterSize (min_size);
-    // ec.setMaxClusterSize (25000);
+    ec.setMaxClusterSize (max_size);
     ec.setSearchMethod (tree);
     ec.setInputCloud (cloud);
     ec.extract (cluster_indices);
@@ -221,7 +234,120 @@ template<typename PointT>
 void write_submaps(std::string filename, std::vector<Submap<PointT>> submaps)
 {
     hid_t file_id = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+
+    for (const auto& submap : submaps) {
+        
+        const std::string submap_group = "submap_" + std::to_string(submap.id);
+        H5Gcreate(file_id, submap_group.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+        /// Create a seperate dataset to denote the number of segments
+        {
+            hsize_t dims[] = {1};
+            hid_t dataspace_id = H5Screate_simple(1, dims, NULL);
+            std::string dataset_name = submap_group + "/num_segments";
+            hid_t dataset_id = H5Dcreate(file_id, dataset_name.c_str(), H5T_NATIVE_INT32, dataspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+            const int num_segments = submap.segments.size();
+            auto status = H5Dwrite(dataset_id, H5T_NATIVE_INT32, H5S_ALL, H5S_ALL, H5P_DEFAULT, &num_segments);
+            if (status != 0) {
+                LOG(INFO) << "Failed to write data for \"" << dataset_name << "\"";
+            }
+
+            CHECK_EQ(H5Dclose(dataset_id), 0);
+            CHECK_EQ(H5Sclose(dataspace_id), 0);
+        }
+
+        for (const auto& segment : submap.segments) {
+            const std::string segment_dataset_name = submap_group + "/segment_" + std::to_string(segment.id);
+            // H5Gcreate(file_id, segment_group.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+            // const auto& segment = segments[i];
+            const uint32_t data_dim = 3;
+            std::vector<double> segment_data(segment.cloud->size() * data_dim);
+            for (uint32_t j = 0; j < segment.cloud->size(); ++j) {
+                segment_data[j * data_dim] = segment.cloud->points[j].x;
+                segment_data[j * data_dim + 1] = segment.cloud->points[j].y;
+                segment_data[j * data_dim + 2] = segment.cloud->points[j].z;
+            }
+            unsigned rank = 2;
+            hsize_t dims[] = {segment.cloud->size(), 3};
+            hid_t dataspace_id = H5Screate_simple(rank, dims, NULL);
+            hid_t dataset_id = H5Dcreate(file_id, segment_dataset_name.c_str(), H5T_NATIVE_DOUBLE, dataspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            
+            auto status = H5Dwrite(dataset_id, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, segment_data.data());
+            if (status != 0) {
+                LOG(INFO) << "Failed to write data for \"" << segment_dataset_name << "\"";
+            }
+
+            CHECK_EQ(H5Dclose(dataset_id), 0);
+            CHECK_EQ(H5Sclose(dataspace_id), 0);
+             
+        }
+
+    }
+
+    CHECK_EQ(H5Fclose(file_id), 0);
 }
+
+
+// void write_segments_to_hdf5(const std::vector<pcl::PointCloud<pcl::PointXYZI>>& segments, hid_t file_id, uint32_t submap_id)
+// {
+//     LOG(INFO) << "Submap contains " << segments.size() << " segments." << std::endl;
+//     LOG(INFO) << "file_id: " << file_id;
+
+
+//     const std::string submap_group = "submap_" + std::to_string(submap_id);
+//     H5Gcreate(file_id, submap_group.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+//     // CHECK(H5Gcreate(file_id, submap_group.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT) == 0) 
+//     //         << "Failed to create group \"" << submap_group << "\"";
+
+//     {
+//         // Create a seperate dataset to denote the number of segments
+//         hsize_t dims[] = {1};
+//         hid_t dataspace_id = H5Screate_simple(1, dims, NULL);
+//         std::string dataset_name = submap_group + "/num_segments";
+//         hid_t dataset_id = H5Dcreate(file_id, dataset_name.c_str(), H5T_NATIVE_INT32, dataspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+//         const int num_segments = segments.size();
+//         auto status = H5Dwrite(dataset_id, H5T_NATIVE_INT32, H5S_ALL, H5S_ALL, H5P_DEFAULT, &num_segments);
+//         if (status != 0) {
+//             LOG(INFO) << "Failed to write data for \"" << dataset_name << "\"";
+//         }
+
+//         CHECK_EQ(H5Dclose(dataset_id), 0);
+//         CHECK_EQ(H5Sclose(dataspace_id), 0);
+//     }
+
+//     for (uint32_t i = 0; i < segments.size(); ++i) {
+        
+//         const std::string segment_dataset_name = submap_group + "/segment_" + std::to_string(i);
+//         // H5Gcreate(file_id, segment_group.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+
+//         const auto& segment = segments[i];
+//         const uint32_t data_dim = 4;
+//         std::vector<double> segment_data(segment.size() * data_dim);
+//         for (uint32_t j = 0; j < segment.size(); ++j) {
+//             segment_data[j * data_dim] = segment.points[j].x;
+//             segment_data[j * data_dim + 1] = segment.points[j].y;
+//             segment_data[j * data_dim + 2] = segment.points[j].z;
+//             segment_data[j * data_dim + 3] = segment.points[j].intensity;
+//         }
+
+//         unsigned rank = 2;
+//         hsize_t dims[] = {segment.size(), 4};
+//         hid_t dataspace_id = H5Screate_simple(rank, dims, NULL);
+//         hid_t dataset_id = H5Dcreate(file_id, segment_dataset_name.c_str(), H5T_NATIVE_DOUBLE, dataspace_id, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        
+//         auto status = H5Dwrite(dataset_id, H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, H5P_DEFAULT, segment_data.data());
+//         if (status != 0) {
+//             LOG(INFO) << "Failed to write data for \"" << segment_dataset_name << "\"";
+//         }
+
+//         CHECK_EQ(H5Dclose(dataset_id), 0);
+//         CHECK_EQ(H5Sclose(dataspace_id), 0);
+//     }
+// }
 
 void write_correspondences(std::string filename, std::vector<Correspondence> correspondences)
 {
@@ -261,71 +387,112 @@ void write_correspondences(std::string filename, std::vector<Correspondence> cor
 
 
 
-int test_submaps(int argc, char** argv)
-{   
-    std::vector<pcl::PointXYZ> submap_centers;
+// int test_submaps(int argc, char** argv)
+// {   
+//     std::vector<pcl::PointXYZ> submap_centers;
 
-    std::stringstream file_ss;
-    const int id_max = 356;
-    const std::string file_prefix = "/media/admini/My_data/0629/lidar_calib/20200617160311_lyu_shengda_calib.bag_segment_"; 
-    for (int i = 0; i < id_max; ++i) {
-        file_ss << file_prefix << std::to_string(i) << ".pcd";
+//     std::stringstream file_ss;
+//     const int id_max = 356;
+//     const std::string file_prefix = "/media/li/LENOVO/dataset/kitti/lidar_odometry/extracted_submaps/00/submap_"; 
+//     for (int i = 0; i < id_max; ++i) {
+//         file_ss << file_prefix << std::to_string(i) << ".pcd";
 
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in(new pcl::PointCloud<pcl::PointXYZ>());
-        pcl::io::loadPCDFile(file_ss.str(), *cloud_in);
+//         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in(new pcl::PointCloud<pcl::PointXYZ>());
+//         pcl::io::loadPCDFile(file_ss.str(), *cloud_in);
 
-        // submap_centers.push_back(calculate_center_by_boundary(*cloud_in));
-        submap_centers.push_back(calculate_center(*cloud_in));
+//         // submap_centers.push_back(calculate_center_by_boundary(*cloud_in));
+//         submap_centers.push_back(calculate_center(*cloud_in));
         
-        file_ss.str("");
-    }
+//         file_ss.str("");
+//     }
 
-    std::vector<std::pair<int, int>> submap_correspondences;
-    const float threshold_distance = 50.f;
-    for (std::size_t i = 0; i < submap_centers.size(); ++i) {
-        const auto& center_i = submap_centers[i];
-        for (std::size_t j = 0; j < submap_centers.size(); ++j) {
-            const auto& center_j = submap_centers[j];
-            float distance_xy = std::sqrt(std::pow(center_i.x - center_j.x, 2) + std::pow(center_i.y - center_j.y, 2));
+//     std::vector<std::pair<int, int>> submap_correspondences;
+//     const float threshold_distance = 50.f;
+//     for (std::size_t i = 0; i < submap_centers.size(); ++i) {
+//         const auto& center_i = submap_centers[i];
+//         for (std::size_t j = 0; j < submap_centers.size(); ++j) {
+//             const auto& center_j = submap_centers[j];
+//             float distance_xy = std::sqrt(std::pow(center_i.x - center_j.x, 2) + std::pow(center_i.y - center_j.y, 2));
 
-            if (distance_xy < threshold_distance) {
-                submap_correspondences.push_back(std::make_pair(i, j));
-            }
-        }
-    }
+//             if (distance_xy < threshold_distance) {
+//                 submap_correspondences.push_back(std::make_pair(i, j));
+//             }
+//         }
+//     }
 
-    for (const auto& correspondence : submap_correspondences) {
-        std::cout << "(" << correspondence.first << "," << correspondence.second << ")\n";
-    }
+//     for (const auto& correspondence : submap_correspondences) {
+//         std::cout << "(" << correspondence.first << "," << correspondence.second << ")\n";
+//     }
 
-    // TODO: save the submap correspondences in a file (e.g. txt file)
+//     // TODO: save the submap correspondences in a file (e.g. txt file)
 
-    return 0;
-}
+//     return 0;
+// }
 
 
 int test_submaps_and_segments(int argc, char** argv)
 {
+
+    google::ParseCommandLineFlags(&argc, &argv, true);
+    google::InitGoogleLogging(argv[0]);
+    FLAGS_alsologtostderr = true;
+
+    if (FLAGS_file_prefix == "" || FLAGS_h5filename == "" || FLAGS_correspondence_filename == "" || FLAGS_id_max == 0) {
+        LOG(INFO) << "Prepare submaps-segments database in the form of h5 file, and generate a correspondence file.";
+        LOG(INFO) << "usage: ./submap_correspondences -file_prefix=<submap-cloud-prefix> "
+                     "-h5filename=<xxx.h5> "
+                     "-correspondence_filename=<xxx.txt>";
+
+        return 0;
+    }
+
+
     using Submap = Submap<pcl::PointXYZ>; 
 
     std::vector<Submap> submaps;
 
     std::stringstream file_ss;
-    const int id_max = 5;
-    const std::string file_prefix = "/media/admini/My_data/0629/lidar_calib/20200617160311_lyu_shengda_calib.bag_segment_"; 
-    std::cout << "Starting to create submaps ..." << std::endl;
-    for (int i = 0; i < id_max; ++i) {
-        file_ss << file_prefix << std::to_string(i) << ".pcd";
+    const int id_max = FLAGS_id_max;
+    // const std::string file_prefix = "/media/li/LENOVO/dataset/kitti/lidar_odometry/extracted_submaps/00/submap_";
+    const std::string file_prefix = FLAGS_file_prefix;
 
+    std::cout << "Starting to create submaps ..." << std::endl;
+    ThreadPool pool(7);
+    pool.init();
+    auto create_submap = [](const std::string cloud_filename, int id){
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in(new pcl::PointCloud<pcl::PointXYZ>());
-        pcl::io::loadPCDFile(file_ss.str(), *cloud_in);
+        pcl::io::loadPCDFile(cloud_filename, *cloud_in);
+
+        pcl::ApproximateVoxelGrid<pcl::PointXYZ> avg;
+        avg.setInputCloud(cloud_in);
+        avg.setLeafSize(0.05f, 0.05f, 0.05f);
+        avg.filter(*cloud_in);
 
         // submap_centers.push_back(calculate_center_by_boundary(*cloud_in));
-        submaps.emplace_back(cloud_in, i);
-        std::cout << "Created submap " << i << " with " << submaps[i].segments.size() << " segments." << std::endl;
-        
+        Submap submap(cloud_in, id);
+
+        return submap;
+    };
+
+    std::vector<std::future<Submap>> futures;
+    for (int i = 0; i < id_max; ++i) {
         file_ss.str("");
+        file_ss << file_prefix << std::to_string(i) << ".pcd";
+
+        
+        // auto future = pool.submit(create_submap, file_ss.str(), i);
+        futures.push_back(pool.submit(create_submap, file_ss.str(), i));
+        // submaps.emplace_back(cloud_in, i);    
     }
+
+    // submaps.push_back(future.get());
+    for (int i = 0; i < id_max; ++i) {
+        submaps.push_back(futures[i].get());
+        LOG(INFO) << "Created submap " << i << " with " << submaps[i].segments.size() << " segments.";
+    }
+
+    pool.shutdown();
+
 
     std::cout << "Starting to make correspondences ..." << std::endl;
 
@@ -344,8 +511,8 @@ int test_submaps_and_segments(int argc, char** argv)
         }
     }
 
-    write_submaps("submap_segments.h5", submaps);
-    write_correspondences("correspondences.txt", correspondences);
+    write_submaps(FLAGS_h5filename, submaps);
+    write_correspondences(FLAGS_correspondence_filename, correspondences);
 }
 
 

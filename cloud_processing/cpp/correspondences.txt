@@ -1,0 +1,4 @@
+{
+    "submap_segment_h5_file": "submap_segments.h5",
+    "correspondences": ""
+}
