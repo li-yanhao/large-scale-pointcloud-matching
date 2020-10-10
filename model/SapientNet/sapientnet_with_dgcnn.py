@@ -61,6 +61,7 @@ class DescripNet(nn.Module):
         return y
 
 
+
 class DgcnnModel(nn.Module):
     def __init__(self, k, feature_dims, emb_dims, output_classes, input_dims=3,
                  dropout_prob=0.5):
@@ -74,7 +75,7 @@ class DgcnnModel(nn.Module):
             self.conv.append(EdgeConv(
                 feature_dims[i - 1] if i > 0 else input_dims,
                 feature_dims[i],
-                batch_norm=False))
+                batch_norm=True))
 
         self.proj = nn.Linear(sum(feature_dims), emb_dims[0])
 
@@ -83,14 +84,13 @@ class DgcnnModel(nn.Module):
         self.dropouts = nn.ModuleList()
 
         self.num_embs = len(emb_dims) - 1
-        for i in range(self.num_embs):
+        for i in range(1, self.num_embs + 1):
             self.embs.append(nn.Linear(
                 # * 2 because of concatenation of max- and mean-pooling
-                emb_dims[i] if i > 1 else (emb_dims[i]),
-                emb_dims[i+1])
-            )
+                emb_dims[i - 1] if i > 1 else (emb_dims[i - 1] * 2),
+                emb_dims[i]))
             # self.bn_embs.append(nn.BatchNorm1d(emb_dims[i]))
-            # self.dropouts.append(nn.Dropout(dropout_prob))
+            self.dropouts.append(nn.Dropout(dropout_prob))
 
         self.proj_output = nn.Linear(emb_dims[-1], output_classes)
 
@@ -110,10 +110,9 @@ class DgcnnModel(nn.Module):
 
         h = torch.cat(hs, 2)
         h = self.proj(h)
-        # h_max, _ = torch.max(h, 1)
+        h_max, _ = torch.max(h, 1)
         h_avg = torch.mean(h, 1)
-        h = h_avg
-        # h = torch.cat([h_max, h_avg], 1)
+        h = torch.cat([h_max, h_avg], 1)
 
         for i in range(self.num_embs):
             h = self.embs[i](h)
@@ -123,7 +122,6 @@ class DgcnnModel(nn.Module):
 
         h = self.proj_output(h)
         return h
-
 
 MODEL_UNIT_TEST = False
 if MODEL_UNIT_TEST:
@@ -177,8 +175,8 @@ def compute_metrics(matches0, matches1, match_matrix_ground_truth):
     matches0_recall_idx_tuple = (np.arange(len(matches0))[match_matrix_ground_truth[:-1, -1]==0], matches0[match_matrix_ground_truth[:-1, -1]==0])
     matches1_recall_idx_tuple = (np.arange(len(matches1))[match_matrix_ground_truth[-1, :-1]==0], matches1[match_matrix_ground_truth[-1, :-1]==0])
 
-    match_0_acc = match_matrix_ground_truth[:-1, :][matches0_precision_idx_tuple].mean()
-    match_1_acc = match_matrix_ground_truth.T[:-1, :][matches1_precision_idx_tuple].mean()
+    # match_0_acc = match_matrix_ground_truth[:-1, :][matches0_precision_idx_tuple].mean()
+    # match_1_acc = match_matrix_ground_truth.T[:-1, :][matches1_precision_idx_tuple].mean()
 
     metrics = {
         "matches0_acc": match_matrix_ground_truth[:-1, :][matches0_idx_tuple].mean(),
@@ -258,7 +256,7 @@ if __name__ == "__main__":
         # model = DescripNet(k=10, in_dim=3, emb_dims=[64, 128, 128, 512], out_dim=descriptor_dim) # TODO: debug here
         model = DgcnnModel(k=5, feature_dims=[64, 128, 256], emb_dims=[512, 256], output_classes=descriptor_dim)
         model = model.to(dev)
-        # model.load_state_dict(torch.load(os.path.join(DATA_DIR, "model-dgcnn-no-dropout.pth"), map_location=dev))
+        model.load_state_dict(torch.load(os.path.join(DATA_DIR, "model-dgcnn-kitti00.pth"), map_location=dev))
 
 
         super_glue_config = {
@@ -272,7 +270,7 @@ if __name__ == "__main__":
         superglue = SuperGlue(super_glue_config)
         superglue = superglue.to(dev)
 
-        # superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue-dgcnn-kitti00.pth"), map_location=dev))
+        superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue-dgcnn-kitti00.pth"), map_location=dev))
 
         opt = optim.Adam(list(model.parameters()) + list(superglue.parameters()), lr=1e-4, weight_decay=2e-6)
         num_epochs = 5

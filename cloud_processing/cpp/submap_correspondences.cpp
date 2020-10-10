@@ -1,19 +1,18 @@
-
+#include <H5Cpp.h>
 #include <H5DataSet.h>
 #include <fstream>
 #include <iostream>
 
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
+#include <gflags/gflags.h>
+#include <glog/logging.h>
 #include <pcl/filters/approximate_voxel_grid.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/kdtree/kdtree.h>
 #include <pcl/search/impl/kdtree.hpp>
 #include <pcl/segmentation/extract_clusters.h>
 
-#include "H5Cpp.h"
-#include "gflags/gflags.h"
-#include "glog/logging.h"
 #include "thread_pool.h"
 
 using namespace H5;
