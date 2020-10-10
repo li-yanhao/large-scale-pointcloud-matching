@@ -1,19 +1,19 @@
-
+#include <H5Cpp.h>
 #include <H5DataSet.h>
 #include <fstream>
 #include <iostream>
 
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
+#include <gflags/gflags.h>
+#include <glog/logging.h>
 #include <pcl/filters/approximate_voxel_grid.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/kdtree/kdtree.h>
 #include <pcl/search/impl/kdtree.hpp>
 #include <pcl/segmentation/extract_clusters.h>
+#include <pcl/filters/random_sample.h>
 
-#include "H5Cpp.h"
-#include "gflags/gflags.h"
-#include "glog/logging.h"
 #include "thread_pool.h"
 
 using namespace H5;
@@ -28,7 +28,7 @@ DEFINE_int32(num_thread, 7, "num_thread");
 
 constexpr float kClusterTolerance = 0.8f;  // unit: meter
 constexpr int kMinClusterSize = 100;       // unit: (number of points)
-constexpr int kMaxClusterSize = 5000;      // unit: (number of points)
+constexpr int kMaxClusterSize = 512;      // unit: (number of points)
 
 constexpr float kMaxInterSubmapDistance = 30.f;       // unit: meter
 constexpr float kMaxInterSegmentDistance = 5.f;       // unit: meter
@@ -215,7 +215,7 @@ std::vector<typename pcl::PointCloud<PointT>::Ptr> extract_segments(const typena
 
     ec.setClusterTolerance(cluster_tolerance);
     ec.setMinClusterSize(min_size);
-    ec.setMaxClusterSize(max_size);
+    // ec.setMaxClusterSize(max_size);
     ec.setSearchMethod(tree);
     ec.setInputCloud(cloud);
     ec.extract(cluster_indices);
@@ -223,8 +223,8 @@ std::vector<typename pcl::PointCloud<PointT>::Ptr> extract_segments(const typena
     std::vector<typename pcl::PointCloud<PointT>::Ptr> clusters;
     for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin(); it != cluster_indices.end();
          ++it) {
-        if (it->indices.size() > 6000)
-            continue;
+        // if (it->indices.size() > 6000)
+        //     continue;
 
         typename pcl::PointCloud<PointT>::Ptr cloud_cluster(new pcl::PointCloud<PointT>);
         for (std::vector<int>::const_iterator pit = it->indices.begin(); pit != it->indices.end(); ++pit) {
@@ -234,6 +234,11 @@ std::vector<typename pcl::PointCloud<PointT>::Ptr> extract_segments(const typena
         cloud_cluster->height = cloud_cluster->points.size();
         cloud_cluster->width = 1;
         cloud_cluster->is_dense = true;
+
+        pcl::RandomSample<PointT> rs;
+        rs.setInputCloud(cloud_cluster);
+        rs.setSample(max_size);
+        rs.filter(*cloud_cluster);
 
         clusters.push_back(std::move(cloud_cluster));
     }
@@ -519,18 +524,8 @@ int test_submaps_and_segments(int argc, char** argv)
         file_ss << file_prefix << std::to_string(i) << ".pcd";
 
         pool.submit(initialize_submap, file_ss.str(), i);
-
-
-        // auto future = pool.submit(create_submap, file_ss.str(), i);
-        // futures.push_back(pool.submit(create_submap, file_ss.str(), i));
-        // submaps.emplace_back(cloud_in, i);
     }
 
-    // submaps.push_back(future.get());
-    // for (int i = 0; i < id_max; ++i) {
-    //     submaps.push_back(futures[i].get());
-    //     LOG(INFO) << "Created submap " << i << " with " << submaps[i].segments.size() << " segments.";
-    // }
 
     pool.shutdown();
     LOG(INFO) << submaps[0]->id;

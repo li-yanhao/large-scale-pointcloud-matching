@@ -97,3 +97,6 @@ target_link_libraries (segmatch_to_pcds ${PCL_LIBRARIES} )
 
 add_executable(bird_view_image bird_view_image.cpp)
 target_link_libraries (bird_view_image ${PCL_LIBRARIES} ${OpenCV_LIBRARIES})
+
+add_executable(uniform_sample uniform_sample.cpp)
+target_link_libraries(uniform_sample ${PCL_LIBRARIES})
