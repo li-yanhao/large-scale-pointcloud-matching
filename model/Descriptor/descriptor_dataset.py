@@ -2,8 +2,15 @@ import os
 
 import numpy as np
 import torch
+<<<<<<< HEAD
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
+=======
+from PIL import Image
+from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
+from torch.utils.data.dataloader import default_collate
+>>>>>>> 8ca4247be825a9b02abbb208901a86177e153943
 import torchvision.transforms as transforms
 from sklearn.neighbors import NearestNeighbors
 import faiss
@@ -14,6 +21,7 @@ import json
 from sklearn.model_selection import train_test_split
 
 
+<<<<<<< HEAD
 def locate_query_in_array(query_id, arr):
     arr_cumsum = arr.cumsum()
     arr_tmp = arr_cumsum - query_id - 1
@@ -22,6 +30,16 @@ def locate_query_in_array(query_id, arr):
     local_id = query_id - arr_cumsum[global_id-1] if global_id > 0 else query_id
 
     return global_id, local_id
+=======
+def find_cumsum_in_array(query, arr):
+    arr_cumsum = arr.cumsum()
+    arr_tmp = arr_cumsum - query
+    arr_tmp[arr_tmp < 0] = query
+    idx = arr_tmp.argmin()
+    remaining = query - arr_cumsum[idx-1] if idx > 0 else query
+
+    return idx, remaining-1
+>>>>>>> 8ca4247be825a9b02abbb208901a86177e153943
 
 
 def create_submap_dataset(h5file: h5py.File):
@@ -100,7 +118,11 @@ class DescriptorDataset(Dataset):
         return self.dataset_size
 
     def __getitem__(self, index):
+<<<<<<< HEAD
         correspondence_id, segment_pair_id = locate_query_in_array(index, self.arr_num_segment_pairs)
+=======
+        correspondence_id, segment_pair_id = find_cumsum_in_array(index, self.arr_num_segment_pairs)
+>>>>>>> 8ca4247be825a9b02abbb208901a86177e153943
         positive_submap_ids = self.correspondences[correspondence_id]['submap_pair']
         positive_segment_ids = self.correspondences[correspondence_id]['segment_pairs'][:, segment_pair_id]
 
@@ -158,6 +180,18 @@ class DescriptorDataset(Dataset):
         #     positives = torch.cat([self.input_transforms(img).unsqueeze(0) for img in positives])
         # return query, positives, negatives
 
+<<<<<<< HEAD
+=======
+
+# class ValidationDatabase(object):
+#     def
+
+
+
+
+
+
+>>>>>>> 8ca4247be825a9b02abbb208901a86177e153943
 if __name__ == "__main__":
     if True:
         h5_filename = "/media/admini/My_data/submap_database/00/submap_segments.h5"
