@@ -1,7 +1,7 @@
 from model.Matcher.superglue import SuperGlue
 from model.Matcher.matcher_dataset import *
 from model.Descriptor.descnet import DgcnnModel
-from model.Transform.rtnet import RTNet
+from model.Transform.rtnet import *
 import argparse
 import os
 from torch.utils.data import DataLoader
@@ -10,15 +10,18 @@ import visdom
 from tqdm import tqdm
 
 
-
 parser = argparse.ArgumentParser(description='MatcherTrain')
 parser.add_argument('--dataset_dir', type=str, default="/media/admini/My_data/matcher_database/00", help='dataset_dir')
 parser.add_argument('--checkpoints_dir', type=str,
                     default="/media/admini/My_data/matcher_database/checkpoints", help='checkpoints_dir')
 parser.add_argument('--add_random_rotation', type=bool, default=True, help='add_random_rotation')
-parser.add_argument('--load_superglue', type=bool, default=True, help='load_superglue')
-parser.add_argument('--learning_rate', type=float, default=5e-4, help='learning_rate')
+parser.add_argument('--load_superglue', type=bool, default=False, help='load_superglue')
+parser.add_argument('--learning_rate', type=float, default=1e-3, help='learning_rate')
 parser.add_argument('--batch_size', type=int, default=16, help='batch_size')
+parser.add_argument('--translation_loss_weight', type=float, default=10, help='translation_loss_weight')
+parser.add_argument('--rotation_loss_weight', type=float, default=100, help='rotation_loss_weight')
+parser.add_argument('--match_loss_weight', type=float, default=1e-6, help='match_loss_weight')
+
 args = parser.parse_args()
 
 
@@ -84,7 +87,7 @@ def train():
     }
     superglue = SuperGlue(super_glue_config)
     superglue = superglue.to(dev)
-    superglue_ckp_filename = "superglue-32-kitti00.pth"
+    superglue_ckp_filename = "superglue-32-kitti00-rtloss.pth"
     if args.load_superglue:
         superglue.load_state_dict(torch.load(os.path.join(args.checkpoints_dir, superglue_ckp_filename), map_location=dev))
 
@@ -139,8 +142,25 @@ def train():
 
             # Train superglue
             match_output = superglue(data)
-            loss = -match_output['scores'] * match_mask_ground_truth.to(dev)
-            loss = loss.sum()
+            match_loss = -match_output['scores'] * match_mask_ground_truth.to(dev)
+            rot_A_B, trans_A_B = torch_icp(centers_A.to(dev)[:,:,:3], centers_B.to(dev)[:,:,:3], match_output['scores'][:,:-1,:-1])
+
+            rot_A_B = rot_A_B.squeeze()
+            trans_A_B = trans_A_B.squeeze()
+
+            T_A_B = T_A_B.to(dev)
+            T_B_A_gt = T_A_B.squeeze().inverse()
+            rot_B_A_gt = T_B_A_gt[:3, :3]
+            trans_B_A_gt = T_B_A_gt[:3, 3:]
+
+            delta_rot = rot_A_B @ rot_B_A_gt
+            delta_trans = (rot_A_B @ trans_B_A_gt).squeeze() + trans_A_B
+
+            rt_loss = args.rotation_loss_weight * torch.acos(0.5*(torch.trace(delta_rot)-1)) \
+                      + args.translation_loss_weight * torch.sqrt(delta_trans @ delta_trans)
+
+            match_loss = match_loss.sum()
+            loss = args.match_loss_weight * match_loss + rt_loss
 
             if num_losses == 0:
                 sum_loss = loss

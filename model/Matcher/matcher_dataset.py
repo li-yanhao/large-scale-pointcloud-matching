@@ -5,6 +5,8 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 import torch
 from scipy.spatial.transform import Rotation as R
+from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 
 def create_submap_dataset(h5file: h5py.File):
@@ -27,7 +29,10 @@ def create_submap_dataset(h5file: h5py.File):
         submap_dict['segment_centers'] = torch.Tensor(segment_centers)
         submap_dict['segment_scales'] = torch.Tensor(np.array([np.sqrt(segment.var(axis=0)) for segment in segments]))
         submap_dict['segments'] = [torch.Tensor((segment - segment.mean(axis=0)) / np.sqrt(segment.var(axis=0))) for segment in segments]
-
+        submap_dict['T_submap_w'] = torch.Tensor([[1, 0, 0, -center_submap_xy[0]],
+                                                  [0, 1, 0, -center_submap_xy[1]],
+                                                  [0, 0, 1, 0],
+                                                  [0, 0, 0, 1]])
         dataset[submap_name] = submap_dict
 
     return dataset
@@ -55,10 +60,11 @@ def rotate_by_matrix(vectors : torch.Tensor, rotation_matrix : torch.Tensor):
 
 
 class MatcherDataset(Dataset):
-    def __init__(self, submap_filename: str, correspondences_filename: str, mode):
+    def __init__(self, submap_filename: str, correspondences_filename: str, mode='train', rotate=True):
         super(MatcherDataset, self).__init__()
 
         self.mode = mode
+        self.rotate = rotate
 
         h5_file = h5py.File(submap_filename, 'r')
         self.num_submaps = len(h5_file.keys())
@@ -97,8 +103,12 @@ class MatcherDataset(Dataset):
 
         segment_id_pairs = correspondence['segment_pairs']
         # create a random rotation matrix
-        rotation_matrix = torch.Tensor(
-            R.from_rotvec((-np.pi / 3 + np.random.ranf() * 2 * np.pi / 3) * np.array([0, 0, 1])).as_matrix())
+        if self.rotate:
+            rotation_matrix = torch.Tensor(
+                R.from_rotvec((-np.pi / 3 + np.random.ranf() * 2 * np.pi / 3) * np.array([0, 0, 1])).as_matrix())
+        else:
+            rotation_matrix = torch.Tensor(
+                R.from_rotvec(np.array([0, 0, 0])).as_matrix())
 
         segments_A = [rotate_by_matrix(segment, rotation_matrix) for segment in self.dataset[submap_A_name]['segments']]
         segments_B = self.dataset[submap_B_name]['segments']
@@ -110,19 +120,34 @@ class MatcherDataset(Dataset):
         segment_scales_A = rotate_by_matrix(self.dataset[submap_A_name]['segment_scales'], rotation_matrix)
         segment_centers_B = self.dataset[submap_B_name]['segment_centers']
         segment_scales_B = self.dataset[submap_B_name]['segment_scales']
+
+        T_Anew_A = torch.cat([rotation_matrix, torch.zeros(3,1)], dim=1)
+        T_Anew_A = torch.cat([T_Anew_A, torch.Tensor([[0, 0, 0, 1]])], dim=0)
+        T_Anew_B = T_Anew_A @ self.dataset[submap_A_name]['T_submap_w'] @ self.dataset[submap_B_name]['T_submap_w'].inverse()
+
         return torch.cat([segment_centers_A, segment_scales_A], dim=1), \
                torch.cat([segment_centers_B, segment_scales_B], dim=1), \
-               segments_A, segments_B, match_mask_ground_truth
+               segments_A, segments_B, \
+               match_mask_ground_truth, \
+               T_Anew_B
 
 
 if __name__ == "__main__":
-    h5_filename = "/home/li/Documents/submap_segments.h5"
-    correspondences_filename = "/home/li/Documents/correspondences.json"
+    h5_filename = "/media/admini/My_data/matcher_database/juxin-0629/submap_segments.h5"
+    correspondences_filename = "/media/admini/My_data/matcher_database/juxin-0629/correspondences.txt"
 
     matcher_dataset = MatcherDataset(h5_filename, correspondences_filename, mode='train')
+    train_loader = DataLoader(matcher_dataset, batch_size=1, shuffle=True)
+
 
     print("Starting to retrieve data ... ")
-    for i in range(10000):
-        centers_A, centers_B, segments_A, segments_B, matches_ground_truth = matcher_dataset[100]
-        print("Retrieved {}-th item.".format(i))
+    with tqdm(train_loader) as tq:
+        item_idx = 0
+        for centers_A, centers_B, segments_A, segments_B, match_mask_ground_truth, T_A_B in tq:
+            print("Retrieved {}-th item.")
+
+
+    # for i in range(10000):
+    #     centers_A, centers_B, segments_A, segments_B, matches_ground_truth = matcher_dataset[100]
+    #     print("Retrieved {}-th item.".format(i))
     print("Finished. ")

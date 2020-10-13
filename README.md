@@ -35,3 +35,5 @@ super_glue_config = {
 * convex cut for component extracting
 
 * differentiable SVD module for registration transform loss
+
+* sinkhorn (optimal transport) + dustbin + svd = partially overlapped point cloud registration
