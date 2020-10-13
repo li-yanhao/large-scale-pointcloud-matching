@@ -26,14 +26,14 @@ DEFINE_int32(id_max, 0, "id_max");
 DEFINE_int32(num_thread, 7, "num_thread");
 
 
-constexpr float kClusterTolerance = 0.8f;  // unit: meter
+constexpr float kClusterTolerance = 0.3f;  // unit: meter
 constexpr int kMinClusterSize = 100;       // unit: (number of points)
 constexpr int kMaxClusterSize = 512;      // unit: (number of points)
 
 constexpr float kMaxInterSubmapDistance = 30.f;       // unit: meter
 constexpr float kMaxInterSegmentDistance = 5.f;       // unit: meter
-constexpr float kOverlapTolerance = 0.5f;             // unit: meter
-constexpr float kMinInterSegmentOverlapRatio = 0.6f;  // unit: none
+constexpr float kOverlapTolerance = 0.3f;             // unit: meter
+constexpr float kMinInterSegmentOverlapRatio = 0.8f;  // unit: none
 
 
 template<typename PointT>

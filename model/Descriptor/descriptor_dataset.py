@@ -2,26 +2,19 @@ import os
 
 import numpy as np
 import torch
-<<<<<<< HEAD
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-=======
-from PIL import Image
-from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
-from torch.utils.data.dataloader import default_collate
->>>>>>> 8ca4247be825a9b02abbb208901a86177e153943
 import torchvision.transforms as transforms
 from sklearn.neighbors import NearestNeighbors
 import faiss
-from tqdm import tqdm
-from scipy.spatial.transform import Rotation
+from scipy.spatial.transform import Rotation as R
 import h5py
 import json
 from sklearn.model_selection import train_test_split
+import open3d as o3d
+import matplotlib.pyplot as plt
 
 
-<<<<<<< HEAD
 def locate_query_in_array(query_id, arr):
     arr_cumsum = arr.cumsum()
     arr_tmp = arr_cumsum - query_id - 1
@@ -30,16 +23,6 @@ def locate_query_in_array(query_id, arr):
     local_id = query_id - arr_cumsum[global_id-1] if global_id > 0 else query_id
 
     return global_id, local_id
-=======
-def find_cumsum_in_array(query, arr):
-    arr_cumsum = arr.cumsum()
-    arr_tmp = arr_cumsum - query
-    arr_tmp[arr_tmp < 0] = query
-    idx = arr_tmp.argmin()
-    remaining = query - arr_cumsum[idx-1] if idx > 0 else query
-
-    return idx, remaining-1
->>>>>>> 8ca4247be825a9b02abbb208901a86177e153943
 
 
 def create_submap_dataset(h5file: h5py.File):
@@ -68,11 +51,16 @@ def create_submap_dataset(h5file: h5py.File):
     return dataset
 
 
+def rotate_by_matrix(vectors : torch.Tensor, rotation_matrix : torch.Tensor):
+    return vectors @ rotation_matrix.transpose(0, 1)
+
+
 class DescriptorDataset(Dataset):
-    def __init__(self, submap_filename: str, correspondences_filename: str, mode='train'):
+    def __init__(self, submap_filename: str, correspondences_filename: str, mode='train', random_rotate=True):
         super(DescriptorDataset, self).__init__()
 
         self.mode = mode
+        self.random_rotate = random_rotate
 
         h5_file = h5py.File(submap_filename, 'r')
         self.num_submaps = len(h5_file.keys())
@@ -87,42 +75,28 @@ class DescriptorDataset(Dataset):
                                                                                                                2).transpose(),
         } for correspondence in correspondences_all]
 
-
-
-
-
-        # correspondences_all = [{
-        #     'submap_pair': correspondence['submap_pair'].split(','),
-        #     'segment_pairs': np.array(list(map(int, correspondence['segment_pairs'].split(',')[:-1]))).reshape(-1,
-        #                                                                                                        2).transpose(),
-        # } for correspondence in correspondences_all]
-
-        # correspondences_all = [{
-        #     'submap_pair': correspondence['submap_pair'].split(',')
-        # } for correspondence in correspondences_all]
-
         correspondences_train, correspondences_test = train_test_split(correspondences_all, test_size=0.5,
                                                                        random_state=1, shuffle=True)
         f.close()
         if mode == 'train':
             self.correspondences = correspondences_train
-        if mode == 'test':
+        elif mode == 'test':
             self.correspondences = correspondences_test
+        else:
+            print("Unknown mode: {}".format(mode))
+            self.correspondences = None
 
         self.arr_num_segment_pairs = np.array([correspondence['segment_pairs'].shape[1] for correspondence in
-                                  self.correspondences])
+                                        self.correspondences])
         self.cumsum_num_segment_paris = self.arr_num_segment_pairs.cumsum()
         self.dataset_size = self.arr_num_segment_pairs.sum()
+
 
     def __len__(self):
         return self.dataset_size
 
     def __getitem__(self, index):
-<<<<<<< HEAD
         correspondence_id, segment_pair_id = locate_query_in_array(index, self.arr_num_segment_pairs)
-=======
-        correspondence_id, segment_pair_id = find_cumsum_in_array(index, self.arr_num_segment_pairs)
->>>>>>> 8ca4247be825a9b02abbb208901a86177e153943
         positive_submap_ids = self.correspondences[correspondence_id]['submap_pair']
         positive_segment_ids = self.correspondences[correspondence_id]['segment_pairs'][:, segment_pair_id]
 
@@ -154,50 +128,53 @@ class DescriptorDataset(Dataset):
                 negative_segment_id],
         }
 
+        if self.random_rotate:
+            rotation_matrix = torch.Tensor(
+                R.from_rotvec((-np.pi + np.random.ranf() * 2 * np.pi) * np.array([0, 0, 1])).as_matrix())
+            anchor['segment'] = rotate_by_matrix(anchor['segment'], rotation_matrix)
+            anchor['segment_scale'] = rotate_by_matrix(anchor['segment_scale'], rotation_matrix)
+            anchor['segment_center'] = rotate_by_matrix(anchor['segment_center'], rotation_matrix)
+
+            rotation_matrix = torch.Tensor(
+                R.from_rotvec((-np.pi + np.random.ranf() * 2 * np.pi) * np.array([0, 0, 1])).as_matrix())
+            positive['segment'] = rotate_by_matrix(positive['segment'], rotation_matrix)
+            positive['segment_scale'] = rotate_by_matrix(positive['segment_scale'], rotation_matrix)
+            positive['segment_center'] = rotate_by_matrix(positive['segment_center'], rotation_matrix)
+
+            rotation_matrix = torch.Tensor(
+                R.from_rotvec((-np.pi + np.random.ranf() * 2 * np.pi) * np.array([0, 0, 1])).as_matrix())
+            negative['segment'] = rotate_by_matrix(negative['segment'], rotation_matrix)
+            negative['segment_scale'] = rotate_by_matrix(negative['segment_scale'], rotation_matrix)
+            negative['segment_center'] = rotate_by_matrix(negative['segment_center'], rotation_matrix)
+
         return anchor, positive, negative
 
-        # query_submap_id = self.submap_ids[index]
-        # positive_ids = self.correspondences[self.correspondences[:,0]==query_submap_id,1]
-        # negative_ids = np.random.choice(np.setdiff1d(self.submap_ids, positive_ids), len(positive_ids), replace=False)
-        #
-        # query = self.dataset['submap_'+str(query_submap_id)]
-        # positives = [self.dataset['submap_'+str(id)] for id in positive_ids]
-        # negatives = [self.dataset['submap_'+str(id)] for id in negative_ids]
-        #
-        # return query, positives, negatives
 
-
-        # positives = []
-        # for pos_index in self.list_of_positives_indices[index]:
-        #     positives.append(Image.open(os.path.join(self.images_dir, self.images_info[pos_index]['image_file'])))
-        # negatives = []
-        # for neg_index in self.list_of_negative_indices[index]:
-        #     negatives.append(Image.open(os.path.join(self.images_dir, self.images_info[neg_index]['image_file'])))
-        #
-        # if self.input_transforms:
-        #     query = self.input_transforms(query)
-        #     negatives = torch.cat([self.input_transforms(img).unsqueeze(0) for img in negatives])
-        #     positives = torch.cat([self.input_transforms(img).unsqueeze(0) for img in positives])
-        # return query, positives, negatives
-
-<<<<<<< HEAD
-=======
-
-# class ValidationDatabase(object):
-#     def
-
-
-
-
-
-
->>>>>>> 8ca4247be825a9b02abbb208901a86177e153943
 if __name__ == "__main__":
     if True:
-        h5_filename = "/media/admini/My_data/submap_database/00/submap_segments.h5"
-        correspondences_filename = "/media/admini/My_data/submap_database/00/correspondences.txt"
+        h5_filename = "/media/admini/My_data/submap_database/juxin-0629/submap_segments.h5"
+        correspondences_filename = "/media/admini/My_data/submap_database/juxin-0629/correspondences.txt"
 
-        descriptor_dataset = DescriptorDataset(h5_filename, correspondences_filename, mode='train')
+        descriptor_dataset = DescriptorDataset(h5_filename, correspondences_filename, mode='train', random_rotate=False)
         train_loader = DataLoader(descriptor_dataset, batch_size=1, shuffle=True)
         for item in train_loader:
             anchor, positive, negative = item
+
+            cloud = o3d.geometry.PointCloud()
+            color_labels = []
+            cloud.points.extend(o3d.utility.Vector3dVector(anchor['segment'].squeeze().numpy()
+                                                           * anchor['segment_scale'].squeeze().numpy()))
+            color_labels.append(np.ones(anchor['segment'].shape[1]) * 1)
+            cloud.points.extend(o3d.utility.Vector3dVector(positive['segment'].squeeze().numpy()
+                                                           * positive['segment_scale'].squeeze().numpy()))
+            color_labels.append(np.ones(positive['segment'].shape[1]) * 2)
+            cloud.points.extend(o3d.utility.Vector3dVector(negative['segment'].squeeze().numpy()
+                                                           * negative['segment_scale'].squeeze().numpy()))
+            color_labels.append(np.ones(negative['segment'].shape[1]) * 3)
+            color_labels = np.concatenate(color_labels)
+            colors = plt.get_cmap("tab20")(color_labels / 4)
+            cloud.colors = o3d.utility.Vector3dVector(colors[:, :3])
+
+            o3d.visualization.draw_geometries([cloud])
+
+

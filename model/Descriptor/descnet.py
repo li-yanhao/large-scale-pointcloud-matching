@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
+
 from dgl.nn.pytorch import KNNGraph, EdgeConv
 
 from torch.utils.data import DataLoader
@@ -98,24 +98,13 @@ class DgcnnModel(nn.Module):
             h = self.embs[i](h)
             # h = self.bn_embs[i](h)
             h = F.leaky_relu(h, 0.2)
-            # h = self.dropouts[i](h)
+            h = self.dropouts[i](h)
 
         h = self.proj_output(h)
         return h
 
 
 if __name__ == "__main__":
-<<<<<<< HEAD
-=======
-    # h5_filename = "/media/admini/My_data/submap_database/00/submap_segments.h5"
-    # correspondences_filename = "/media/admini/My_data/submap_database/00/correspondences.txt"
-    #
-    # descriptor_dataset = DescriptorDataset(h5_filename, correspondences_filename, mode='train')
-    # train_loader = DataLoader(descriptor_dataset, batch_size=1, shuffle=True)
-    # n = 0
-    # for item in train_loader:
-    #     anchor, positive, negative = item
->>>>>>> 8ca4247be825a9b02abbb208901a86177e153943
 
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = DgcnnModel(k=10, feature_dims=[64, 128, 512], emb_dims=[256, 256], output_classes=256)
