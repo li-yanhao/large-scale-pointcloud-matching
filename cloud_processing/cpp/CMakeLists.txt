@@ -100,3 +100,7 @@ target_link_libraries (bird_view_image ${PCL_LIBRARIES} ${OpenCV_LIBRARIES})
 
 add_executable(uniform_sample uniform_sample.cpp)
 target_link_libraries(uniform_sample ${PCL_LIBRARIES})
+
+add_executable(bird_view_dataset bird_view_dataset.cpp)
+target_link_libraries(bird_view_dataset ${PCL_LIBRARIES} glog gflags mpi_cxx)
+

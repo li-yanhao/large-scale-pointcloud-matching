@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 
 parser = argparse.ArgumentParser(description='MatcherTrain')
-parser.add_argument('--dataset_dir', type=str, default="/media/admini/My_data/matcher_database/00", help='dataset_dir')
+parser.add_argument('--dataset_dir', type=str, default="/media/admini/My_data/matcher_database/juxin-0629", help='dataset_dir')
 parser.add_argument('--checkpoints_dir', type=str,
                     default="/media/admini/My_data/matcher_database/checkpoints", help='checkpoints_dir')
 parser.add_argument('--add_random_rotation', type=bool, default=True, help='add_random_rotation')

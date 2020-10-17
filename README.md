@@ -16,6 +16,10 @@ DgcnnModel(k=16, feature_dims=[64, 128, 512], emb_dims=[256, 256], output_classe
 
 model = DgcnnModel(k=16, feature_dims=[64, 128, 512], emb_dims=[256, 256], output_classes=256)
 
+* descriptor-256-dgcnn-e2e.pth
+
+descnet = DgcnnModel(k=5, feature_dims=[64, 128, 256], emb_dims=[512, 256], output_classes=descriptor_dim)
+    
 ### Superglue
 
 * current config
@@ -37,3 +41,12 @@ super_glue_config = {
 * differentiable SVD module for registration transform loss
 
 * sinkhorn (optimal transport) + dustbin + svd = partially overlapped point cloud registration
+
+
+## Experiment results
+
+| descriptor dim | pretrained descnet | match_loss | rt_loss | dataset | result |
+| ------------- | ------------- | ------------- | ------------- | ---- | ----- | 
+|16             |          true |  true | false | ? | ? |
+| 256 | false | true | false | juxin | 0.8 |
+| 256 | false | false | true | juxin | ? |

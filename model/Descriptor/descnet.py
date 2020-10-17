@@ -14,7 +14,7 @@ from tqdm import tqdm
 import os
 import open3d as o3d
 from model.Descriptor.descriptor_dataset import *
-
+from dgl.geometry.pytorch import FarthestPointSampler
 
 class DescNet(nn.Module):
     def __init__(self, dgcnn, meta_info_net):
@@ -104,11 +104,12 @@ class DgcnnModel(nn.Module):
         return h
 
 
+
+
 if __name__ == "__main__":
 
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = DgcnnModel(k=10, feature_dims=[64, 128, 512], emb_dims=[256, 256], output_classes=256)
-    opt = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=1e-4)
     model = model.to(dev)
 
     # x = x.to(dev)

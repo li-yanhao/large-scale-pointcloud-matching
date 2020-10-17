@@ -15,12 +15,13 @@ parser.add_argument('--dataset_dir', type=str, default="/media/admini/My_data/ma
 parser.add_argument('--checkpoints_dir', type=str,
                     default="/media/admini/My_data/matcher_database/checkpoints", help='checkpoints_dir')
 parser.add_argument('--add_random_rotation', type=bool, default=True, help='add_random_rotation')
-parser.add_argument('--load_superglue', type=bool, default=False, help='load_superglue')
+parser.add_argument('--load_descriptor_net', type=bool, default=True, help='load_descriptor_net')
+parser.add_argument('--load_superglue', type=bool, default=True, help='load_superglue')
 parser.add_argument('--learning_rate', type=float, default=1e-3, help='learning_rate')
-parser.add_argument('--batch_size', type=int, default=16, help='batch_size')
-parser.add_argument('--translation_loss_weight', type=float, default=10, help='translation_loss_weight')
-parser.add_argument('--rotation_loss_weight', type=float, default=100, help='rotation_loss_weight')
-parser.add_argument('--match_loss_weight', type=float, default=1e-6, help='match_loss_weight')
+parser.add_argument('--batch_size', type=int, default=1, help='batch_size')
+parser.add_argument('--translation_loss_weight', type=float, default=0.0000010, help='translation_loss_weight')
+parser.add_argument('--rotation_loss_weight', type=float, default=0.00000100, help='rotation_loss_weight')
+parser.add_argument('--match_loss_weight', type=float, default=1, help='match_loss_weight')
 
 args = parser.parse_args()
 
@@ -63,36 +64,38 @@ def train():
     train_loader = DataLoader(matcher_dataset, batch_size=1, shuffle=True)
     dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # descnet is pretrained
+    # descnet is trained together
     descriptor_dim = 256
-    descnet_ckp_filename = "descriptor-256-dgcnn-kitti00.pth"
-    descnet = DgcnnModel(k=16, feature_dims=[64, 128, 512], emb_dims=[256, 256], output_classes=256)
+    descnet = DgcnnModel(k=5, feature_dims=[64, 128, 256], emb_dims=[512, 256], output_classes=descriptor_dim)
+    descnet_ckp_filename = "descriptor-256-dgcnn-e2e-kitti00.pth"
 
-    dgcnn_model_checkpoint = torch.load(os.path.join(args.checkpoints_dir, descnet_ckp_filename),
-                                        map_location=lambda storage, loc: storage)
-    descnet.load_state_dict(dgcnn_model_checkpoint)
+    if args.load_descriptor_net:
+        dgcnn_model_checkpoint = torch.load(os.path.join(args.checkpoints_dir, descnet_ckp_filename),
+                                            map_location=lambda storage, loc: storage)
+        descnet.load_state_dict(dgcnn_model_checkpoint)
+        print("Loaded model checkpoints from \'{}\'.".format(
+            os.path.join(args.checkpoints_dir, descnet_ckp_filename)))
     descnet.to(dev)
-    print("Loaded model checkpoints from \'{}\'.".format(
-        os.path.join(args.checkpoints_dir, descnet_ckp_filename)))
-
 
     # superglue can be trained from scratch
     super_glue_config = {
         'descriptor_dim': descriptor_dim,
         'weights': '',
         'keypoint_encoder': [32, 64, 128, 256],
-        'GNN_layers': ['self', 'cross'] * 9,
+        'GNN_layers': ['self', 'cross'] * 6,
         'sinkhorn_iterations': 150,
         'match_threshold': 0.1,
     }
     superglue = SuperGlue(super_glue_config)
     superglue = superglue.to(dev)
-    superglue_ckp_filename = "superglue-32-kitti00-rtloss.pth"
+    superglue_ckp_filename = "superglue-256-dgcnn-e2e-kitti00.pth"
     if args.load_superglue:
         superglue.load_state_dict(torch.load(os.path.join(args.checkpoints_dir, superglue_ckp_filename), map_location=dev))
 
-    # only train superglue
-    opt = optim.Adam(superglue.parameters(), lr=args.learning_rate, weight_decay=2e-6)
+    # train superglue and descnet
+
+    opt = optim.Adam(list(descnet.parameters()) + list(superglue.parameters()), lr=1e-4, weight_decay=2e-6)
+
     num_epochs = 5
 
     # scheduler = optim.lr_scheduler.CosineAnnealingLR(opt, num_epochs, eta_min=0.001)
@@ -118,21 +121,21 @@ def train():
             # Get descriptors from descnet
             descriptors_A = []
             descriptors_B = []
-            with torch.no_grad():
-                for segment in segments_A:
-                    # descriptors_A.append(model(segment.to(dev), dev))
-                    descriptors_A.append(descnet(segment.to(dev)))
-                for segment in segments_B:
-                    # descriptors_B.append(model(segment.to(dev), dev))
-                    descriptors_B.append(descnet(segment.to(dev)))
-                descriptors_A = torch.cat(descriptors_A, dim=0).transpose(0, 1).reshape(1, descriptor_dim, -1)
-                descriptors_B = torch.cat(descriptors_B, dim=0).transpose(0, 1).reshape(1, descriptor_dim, -1)
-                data = {
-                    'descriptors0': descriptors_A,
-                    'descriptors1': descriptors_B,
-                    'keypoints0': centers_A.to(dev),
-                    'keypoints1': centers_B.to(dev),
-                }
+
+            for segment in segments_A:
+                # descriptors_A.append(model(segment.to(dev), dev))
+                descriptors_A.append(descnet(segment.to(dev)))
+            for segment in segments_B:
+                # descriptors_B.append(model(segment.to(dev), dev))
+                descriptors_B.append(descnet(segment.to(dev)))
+            descriptors_A = torch.cat(descriptors_A, dim=0).transpose(0, 1).reshape(1, descriptor_dim, -1)
+            descriptors_B = torch.cat(descriptors_B, dim=0).transpose(0, 1).reshape(1, descriptor_dim, -1)
+            data = {
+                'descriptors0': descriptors_A,
+                'descriptors1': descriptors_B,
+                'keypoints0': centers_A.to(dev),
+                'keypoints1': centers_B.to(dev),
+            }
 
 
             # for i in range(len(segments_A)):
@@ -199,8 +202,9 @@ def train():
 
             item_idx += 1
             if item_idx % 200 == 0:
-                # TODO: save weight file
+                torch.save(descnet.state_dict(), os.path.join(args.checkpoints_dir, descnet_ckp_filename))
                 torch.save(superglue.state_dict(), os.path.join(args.checkpoints_dir, superglue_ckp_filename))
+                print("descnet model saved in {}".format(os.path.join(args.checkpoints_dir, descnet_ckp_filename)))
                 print("superglue model saved in {}".format(os.path.join(args.checkpoints_dir, superglue_ckp_filename)))
 
 
