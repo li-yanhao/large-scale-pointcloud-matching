@@ -120,7 +120,7 @@ Grid<std::vector<std::size_t>> make_grid_with_indices(const pcl::PointCloud<Poin
     // 2. make a grid
     int grid_size = int(scale / resolution);
     Grid<std::vector<std::size_t>> grid(grid_size, grid_size);
-    std::cout << "grid initialization success\n";
+    // std::cout << "grid initialization success\n";
 
     for (std::size_t i = 0; i < cloud.size(); ++i) {
         std::size_t x_index = (cloud.points[i].x - center.x + scale / 2) / resolution;
@@ -164,7 +164,6 @@ Grid<DataBin<PointT>> make_grid_with_databins(const pcl::PointCloud<PointT>& clo
     return grid;
 }
 
-
 int bird_view_image(int argc, char** argv)
 {
     if (argc != 2) {
@@ -195,8 +194,8 @@ int bird_view_image(int argc, char** argv)
     // vg.filter (*cloud_in);
 
     // 2. histogram of xy plane
-    const float scale = 100.f;
-    const float resolution = 0.1f;
+    const float scale = 200.f;
+    const float resolution = 0.2f;
 
 #if 0
     {
@@ -214,11 +213,21 @@ int bird_view_image(int argc, char** argv)
         pcl::copyPointCloud(*cloud_in, *cloud_out);
         auto grid = make_grid_with_indices(*cloud_in, scale, resolution);
         int grid_size = int(scale / resolution);
-        cv::Mat image = cv::Mat::zeros(grid_size, grid_size, CV_16UC1);
+        cv::Mat image = cv::Mat::zeros(grid_size, grid_size, CV_32FC1);
         cv::Mat image_normalized = cv::Mat::zeros(grid_size, grid_size, CV_32FC1);
         for (int i = 0; i < grid_size; ++i) {
             for (int j = 0; j < grid_size; ++j) {
-                image.at<uint16_t>(i, j) = grid.at(i, j).size();
+                // maximum height of the points bin
+                const auto& indices = grid.at(i, j);
+                
+                float max_height = 0;
+                for (auto index : indices) {
+                    max_height = cloud_in->points[index].z > max_height ? cloud_in->points[index].z : max_height;
+                }
+                // if (max_height > 0) {
+                //     std::cout << max_height << std::endl;
+                // }
+                image.at<float>(i, j) = max_height;
                 // if (grid.at(i, j).size() > 10)
                 //     std::cout << grid.at(i, j).size() << std::endl;
 
@@ -227,11 +236,37 @@ int bird_view_image(int argc, char** argv)
 
         // cv::cvtColor(image, image_normalized, );
         image.convertTo(image_normalized, CV_32FC1);
-        // cv::normalize(image_normalized, image_normalized, 1, 0, cv::NORM_MINMAX);
-        cv::threshold(image_normalized, image_normalized, 0.000001, 1.0, cv::THRESH_BINARY);
-        // std::cout << image_normalized;
+        // cv::threshold(image_normalized, image_normalized, 0.000001, 1.0, cv::THRESH_BINARY);
 
-        cv::imshow("image_normalized", image_normalized);
+
+        cv::normalize(image_normalized, image_normalized, 1, 0, cv::NORM_MINMAX);
+        // cv::namedWindow("image_normalized" , cv::WINDOW_NORMAL);
+        // cv::imshow("image_normalized", image_normalized);
+        // cv::waitKey(0);
+
+
+        std::vector<cv::Point2f> points;
+        int MAX_COUNT = 256;
+        cv::goodFeaturesToTrack(image_normalized, points, MAX_COUNT, 0.01, 10, cv::Mat(), 24, true, 0.04);
+
+        // cv::Mat corners_img;
+        // cv::cornerHarris( image_normalized, //输入8bit单通道灰度Mat矩阵
+		// 		  corners_img, //用于保存Harris角点检测结果，32位单通道，大小与src相同
+		// 		  12,   //滑块窗口的尺寸
+		// 		  3,       //Sobel边缘检测滤波器大小
+		// 		  0.04);
+        // cv::imshow("corners_img", corners_img);
+        // cv::waitKey(0);
+
+        cv::Mat image_rgb; 
+        cv::cvtColor(image_normalized, image_rgb, cv::COLOR_GRAY2RGB);
+
+        for(int i = 0; i < points.size(); ++i ) {
+
+            cv::circle(image_rgb, points[i], 3, cv::Scalar(0,255,0), -1, 8);
+        }
+
+        cv::imshow("image_rgb", image_rgb);
         cv::waitKey(0);
 
         // std::sort(grid.begin(), grid.end(), [](auto square_x, auto square_y){

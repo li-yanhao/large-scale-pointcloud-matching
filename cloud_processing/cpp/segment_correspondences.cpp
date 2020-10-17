@@ -41,7 +41,7 @@ bool is_overlapped(const pcl::PointCloud<pcl::PointXYZRGB>::Ptr& cloud_A,
                    const pcl::PointCloud<pcl::PointXYZRGB>::Ptr& cloud_B,
                    float overlap_ratio)
 {
-    const float search_radius = 0.5f;
+    const float search_radius = 0.3f;
     const auto& cloud_large = cloud_A->size() > cloud_B->size() ? cloud_A : cloud_B;
     const auto& cloud_small = cloud_A->size() <= cloud_B->size() ? cloud_A : cloud_B;
     pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZRGB>());
@@ -65,7 +65,7 @@ bool is_overlapped(const pcl::PointCloud<pcl::PointXYZRGB>::Ptr& cloud_A,
 std::vector<std::pair<int, int>> make_correspondences(const std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& clusters_A, 
                                                     const std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& clusters_B)
 {
-    const float overlap_ratio = 0.6f;
+    const float overlap_ratio = 0.8f;
     const float max_center_distance(5.f);
     std::vector<pcl::PointXYZ> centers_A;
     std::vector<pcl::PointXYZ> centers_B;
@@ -93,7 +93,7 @@ std::vector<std::pair<int, int>> make_correspondences(const std::vector<pcl::Poi
 }
 
 
-std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> segment(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, float max_distance, int min_size)
+std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> segment(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, float max_distance, int min_size, int max_size)
 {
     // Creating the KdTree object for the search method of the extraction
     pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
@@ -104,7 +104,7 @@ std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> segment(const pcl::PointClou
 
     ec.setClusterTolerance (max_distance);
     ec.setMinClusterSize (min_size);
-    // ec.setMaxClusterSize (25000);
+    ec.setMaxClusterSize (max_size);
     ec.setSearchMethod (tree);
     ec.setInputCloud (cloud);
     ec.extract (cluster_indices);
@@ -296,10 +296,11 @@ int main (int argc, char** argv)
     std::cout << "cloud_B after filtering has: " << cloud_B->points.size ()  << " data points." << std::endl;
 
     // 1. euclidean cluster
-    const float cluster_distance = 0.8f;
+    const float cluster_distance = 0.3f;
     const int cluster_min_size = 100;
-    std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clusters_A = segment(cloud_A, cluster_distance, cluster_min_size);
-    std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clusters_B = segment(cloud_B, cluster_distance, cluster_min_size);
+    const int cluster_max_size = 2000;
+    std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clusters_A = segment(cloud_A, cluster_distance, cluster_min_size, cluster_max_size);
+    std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clusters_B = segment(cloud_B, cluster_distance, cluster_min_size, cluster_max_size);
     
     std::cout << "cloud A has " << clusters_A.size() << " clusters." << std::endl;
     std::cout << "cloud B has " << clusters_B.size() << " clusters." << std::endl;
