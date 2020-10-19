@@ -46,8 +46,8 @@ super_glue_config = {
  atteindre 85% si possible)
 
 * SuperPoint + SuperGlue for relative pose computation (le reseau pretraine 
- marche tres bien deja, il faudra juste adapter les APIs pour le besoin de global
- localisation. S'il nous reste encore du temps, trainer le SuperPoint + SuperGlue)
+ marche tres bien deja, il faudra juste adapter les APIs pour
+ localisation globale. S'il nous reste encore du temps, trainer le SuperPoint + SuperGlue)
 
 * Add a model to recognize whether the global localization is good or bad. (Pas necessaire 
 si le processus de NetVLAD+SuperPoint+SuperGlue est effectif)

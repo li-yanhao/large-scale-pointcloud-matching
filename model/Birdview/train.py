@@ -2,6 +2,7 @@ import os
 import argparse
 from model.Birdview.dataset import *
 from model.SapientNet.superpoint import *
+from model.Birdview.loss import *
 from torch.utils.data import DataLoader
 import numpy as np
 import torch
@@ -25,7 +26,7 @@ from sklearn.model_selection import train_test_split
 
 parser = argparse.ArgumentParser(description='WayzNetVlad')
 parser.add_argument('--mode', type=str, default='train', help='Mode', choices=['train', 'test'])
-parser.add_argument('--batch_size', type=int, default=1, help='batch_size')
+parser.add_argument('--batch_size', type=int, default=2, help='batch_size')
 parser.add_argument('--dataset_dir', type=str, default='/media/admini/lavie/dataset/birdview_dataset/', help='dataset_dir')
 parser.add_argument('--sequence_train', type=str, default='00', help='sequence_train')
 parser.add_argument('--sequence_validate', type=str, default='08', help='sequence_validate')
@@ -34,7 +35,7 @@ parser.add_argument('--sequence_validate', type=str, default='08', help='sequenc
 parser.add_argument('--num_workers', type=int, default=1, help='num_workers')
 # parser.add_argument('--from_scratch', type=bool, default=True, help='from_scratch')
 parser.add_argument('--pretrained_embedding', type=bool, default=False, help='pretrained_embedding')
-parser.add_argument('--num_similar_neg', type=int, default=2, help='number of similar negative samples')
+parser.add_argument('--num_similar_neg', type=int, default=4, help='number of similar negative samples')
 parser.add_argument('--margin', type=float, default=0.5, help='margin')
 parser.add_argument('--use_gpu', type=bool, default=True, help='use_gpu')
 parser.add_argument('--learning_rate', type=float, default=0.0005, help='learning_rate')
@@ -43,7 +44,7 @@ parser.add_argument('--negative_filter_radius', type=float, default=50, help='ne
 parser.add_argument('--saved_model_path', type=str,
                     default='/media/admini/lavie/dataset/birdview_dataset/saved_models', help='saved_model_path')
 parser.add_argument('--epochs', type=int, default=120, help='epochs')
-parser.add_argument('--load_checkpoints', type=bool, default=False, help='load_checkpoints')
+parser.add_argument('--load_checkpoints', type=bool, default=True, help='load_checkpoints')
 parser.add_argument('--num_clusters', type=int, default=64, help='num_clusters')
 parser.add_argument('--final_dim', type=int, default=256, help='final_dim')
 parser.add_argument('--log_path', type=str, default='logs', help='log_path')
@@ -103,6 +104,8 @@ def main():
 
     encoder = resnet18(pretrained=args.pretrained_embedding)
     base_model = nn.Sequential(
+        nn.Conv2d(1, 3, (3, 3), 1),
+        nn.ReLU(),
         encoder.conv1,
         encoder.bn1,
         encoder.relu,
@@ -149,11 +152,12 @@ def main():
         # validate(model, train_images_info, validation_images_info, writer=None)
         epoch = epoch + 1
 
+        train(epoch, model, optimizer, train_data_loader, writer=None)
+        torch.save(model.state_dict(), saved_model_file)
         if epoch % 1 == 0:
             validate(model, validate_database_images_info, validate_query_images_info, validate_images_dir, writer=None)
             validate(model, train_database_images_info, train_query_images_info, train_images_dir, writer=None)
-        train(epoch, model, optimizer, train_data_loader, writer=None)
-        torch.save(model.state_dict(), saved_model_file)
+
         print("Saved models in \'{}\'.".format(saved_model_file))
 
 
@@ -173,7 +177,7 @@ def train(epoch, model, optimizer, train_data_loader, writer=None):
             optimizer.zero_grad()
 
             B, C, W, H = query.shape
-            _, npos, _, _, _ = positives.shape  # B, npos, C, W, H
+            _, npos, _, _, _ = positives.shape  # B, npos, C, W, H (npos=1)
             _, nneg, _, _, _ = negatives.shape  # B, nneg, C, W, H
             # assert npos == nneg
 
@@ -187,15 +191,26 @@ def train(epoch, model, optimizer, train_data_loader, writer=None):
             vlad_encoding = model(input)  # (B * (1 + npos + nneg))(17) * dim_vlad(16384)
             # print(vlad_encoding.shape, B, npos, nneg)
             vladQ, vladP, vladN = torch.split(vlad_encoding, [B, B * npos, B * nneg])
+            descriptor_dim = vladQ.shape[-1]
+            vladQ = vladQ.view(B, 1, descriptor_dim)
+            vladP = vladP.view(B, 1, descriptor_dim)
+            vladN = vladN.view(B, nneg, descriptor_dim)
 
-            loss = 0
-            for i_batch in range(B):
-                index_offet = i_batch * npos
-                for i in range(npos):
-                    loss += criterion(vladQ[i_batch:i_batch + 1],
-                                      vladP[index_offet + i:index_offet + i + 1],
-                                      vladN[index_offet + i:index_offet + i + 1])
-            loss /= B * npos
+            # print(vladQ.shape)
+            # print(vladP.shape)
+            # print(vladN.shape)
+
+            loss = lazy_triplet_loss(vladQ, vladP, vladN, device)
+
+            # loss = 0
+            # for i_batch in range(B):
+            #     index_offet = i_batch * npos
+            #     for i in range(npos):
+            #         loss += criterion(vladQ[i_batch:i_batch + 1],
+            #                           vladP[index_offet + i:index_offet + i + 1],
+            #                           vladN[index_offet + i:index_offet + i + 1])
+            # loss /= B * npos
+
             loss.backward()
             optimizer.step()
 

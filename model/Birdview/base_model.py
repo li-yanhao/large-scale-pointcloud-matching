@@ -14,7 +14,7 @@ class BaseModel(nn.Module):
         self.dim_out = 64
         self.max_value = 256.0
 
-        kernel_size = 10
+        kernel_size = 15
 
         self.layer_3_out_width = (((width - kernel_size+1) // 2 - kernel_size+1) // 2 - kernel_size+1) // 2
         self.layer_3_out_height = (((height - kernel_size+1) // 2 - kernel_size+1) // 2 - kernel_size+1) // 2
@@ -34,7 +34,7 @@ class BaseModel(nn.Module):
         )
 
         self.layer_3 = nn.Sequential(
-            nn.Conv2d(self.dim_2, self.dim_3, (10, 10), 1),
+            nn.Conv2d(self.dim_2, self.dim_3, (kernel_size, kernel_size), 1),
             nn.ReLU(),
             nn.MaxPool2d(2, stride=2),
             # nn.Flatten()

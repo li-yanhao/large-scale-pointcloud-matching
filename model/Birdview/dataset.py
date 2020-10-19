@@ -103,32 +103,24 @@ class NetVladDataset(Dataset):
         self.list_of_positives_indices = []
 
         query_index = 0
-        max_angle_diff_in_radian = max_angle_diff_in_degree / 180 * np.pi
+        # max_angle_diff_in_radian = max_angle_diff_in_degree / 180 * np.pi
         i = 0
         for distances, tmp_positive_indices in zip(list_of_distances, self.list_of_tmp_positives_indices):
             assert len(tmp_positive_indices) > 1
             # print(self.images_info[i]["image_file"])
             i += 1
             tmp_positive_indices = tmp_positive_indices[1:]  # indices[0] is the query sample, remove it
-            # TODO: filter out the samples with large orientation difference
-            # tmp_probabilities = np.exp(distances)
-            # positive_indices = []
-            # probabilities = []
-            # for probability, tmp_index in zip(tmp_probabilities, tmp_positive_indices):
-            #     query_orientation = Rotation.from_quat(self.images_info[query_index]['orientation'])
-            #     positive_orientation = Rotation.from_quat(self.images_info[tmp_index]['orientation'])
-                # angle = abs((query_orientation * positive_orientation.inv()).magnitude())
-                # if angle < max_angle_diff_in_radian:
-                #     positive_indices.append(tmp_index)
-                #     probabilities.append(probability)
+
             positive_indices = tmp_positive_indices
             assert len(positive_indices) > 0
             # probabilities = np.array(probabilities)
             # probabilities /= probabilities.sum()
-            self.list_of_positives_indices.append(
-                np.random.choice(positive_indices, num_similar_negatives * 2, replace=True))
+            # self.list_of_positives_indices.append(
+            #     np.random.choice(positive_indices, 1, replace=True))
+            self.list_of_positives_indices.append(positive_indices)
             query_index += 1
-        self.list_of_positives_indices = [None if len(indices)<=1 else indices[1:] for indices in self.list_of_positives_indices]
+        # self.list_of_positives_indices = [None if len(indices)<1 else indices[1:] for indices in self.list_of_positives_indices]
+
         # print(self.list_of_positives_indices)
 
         self.list_of_negative_indices = []
@@ -154,13 +146,11 @@ class NetVladDataset(Dataset):
 
     def __getitem__(self, index):
         query = Image.open(os.path.join(self.images_dir, self.images_info[index]['image_file']))
-
-
         # Image.open('PATH').convert('RGB')
-
         positives = []
-        for pos_index in self.list_of_positives_indices[index]:
-            positives.append(Image.open(os.path.join(self.images_dir, self.images_info[pos_index]['image_file'])))
+        pos_indices = self.list_of_positives_indices[index]
+        pos_index = np.random.choice(pos_indices, 1, replace=True)[0]
+        positives.append(Image.open(os.path.join(self.images_dir, self.images_info[pos_index]['image_file'])))
         negatives = []
         for neg_index in self.list_of_negative_indices[index]:
             negatives.append(Image.open(os.path.join(self.images_dir, self.images_info[neg_index]['image_file'])))

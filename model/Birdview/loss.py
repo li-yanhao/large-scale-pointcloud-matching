@@ -140,3 +140,51 @@ def _get_triplet_mask(labels):
     mask = distinct_indices * valid_labels.to(device)   # Combine the two masks
 
     return mask
+
+
+def lazy_triplet_loss(anchor, positive, negatives, dev, alpha=0.8):
+    # anchor: B * 1 * D
+    # positive: B * 1 * D
+    # negatives: B * n * D
+    diff_pos = (anchor - positive)
+    diff_pos = (diff_pos * diff_pos).sum(dim=2)
+    diff_neg = anchor - negatives
+    diff_neg = (diff_neg * diff_neg).sum(dim=2)
+    loss = alpha + diff_pos - diff_neg
+    zeros = torch.zeros(loss.shape).to(dev)
+    loss = torch.max(zeros, loss).max(dim=1)[0].sum()
+
+    return loss
+
+
+def lazy_quadruplet_loss(anchor, positive, negatives, unrelated, dev, alpha=0.8):
+    # anchor: B * 1 * D
+    # positive: B * 1 * D
+    # negatives: B * n * D
+    # unrelated: B * 1 * D
+    diff_pos = (anchor - positive)
+    diff_pos = (diff_pos * diff_pos).sum(dim=2)
+    diff_neg_related = anchor - negatives
+    diff_neg_related = (diff_neg_related * diff_neg_related).sum(dim=2)
+    diff_neg_unrelated = unrelated - negatives
+    diff_neg_unrelated = (diff_neg_unrelated * diff_neg_unrelated).sum(dim=2)
+
+    loss_related = alpha + diff_pos - diff_neg_related
+    zeros = torch.zeros(loss_related.shape).to(dev)
+    loss_related = torch.max(zeros, loss_related).max(dim=1)[0].sum()
+
+    loss_unrelated = alpha + diff_pos - diff_neg_unrelated
+    zeros = torch.zeros(loss_unrelated.shape).to(dev)
+    loss_unrelated = torch.max(zeros, loss_unrelated).max(dim=1)[0].sum()
+
+    return loss_related + loss_unrelated
+
+
+if __name__ == '__main__':
+    B, nneg, D = 3, 8, 256
+    anchor = torch.rand(B, 1, D)
+    positive = torch.rand(B, 1, D)
+    negatives = torch.rand(B, nneg, D)
+    unrelated = torch.rand(B, 1, D)
+
+    anchor, positive, negatives, unrelated = torch.rand(B,1,D)
