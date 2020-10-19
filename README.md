@@ -36,12 +36,24 @@ super_glue_config = {
 ````
 ## Some alternative methods
 
-* convex cut for component extracting
+* ~~convex cut for component extracting~~
 
 * differentiable SVD module for registration transform loss
 
-* sinkhorn (optimal transport) + dustbin + svd = partially overlapped point cloud registration
+* ~~sinkhorn (optimal transport) + dustbin + svd = partially overlapped point cloud registration~~
 
+* NetVLAD for birdview image retrieval (Precision~0.7, Optimizer encore le modele pour
+ atteindre 85% si possible)
+
+* SuperPoint + SuperGlue for relative pose computation (le reseau pretraine 
+ marche tres bien deja, il faudra juste adapter les APIs pour le besoin de global
+ localisation. S'il nous reste encore du temps, trainer le SuperPoint + SuperGlue)
+
+* Add a model to recognize whether the global localization is good or bad. (Pas necessaire 
+si le processus de NetVLAD+SuperPoint+SuperGlue est effectif)
+
+
+ 
 
 ## Experiment results
 

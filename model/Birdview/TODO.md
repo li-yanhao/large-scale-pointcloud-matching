@@ -8,7 +8,7 @@ as input features.
 2. Apply Superpoint & Superglue to birdview point cloud 
 birdview operation
     
-    * Feature detection (to look up)    
+    * ~~Feature detection (to look up)~~  
     
     * **Feature detection: use Superpoint, with height, intensity,
     occupancy binary value**  

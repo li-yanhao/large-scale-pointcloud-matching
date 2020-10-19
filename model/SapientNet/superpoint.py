@@ -133,7 +133,7 @@ class SuperPoint(nn.Module):
             c5, self.config['descriptor_dim'],
             kernel_size=1, stride=1, padding=0)
 
-        path = Path(__file__).parent / 'weights/superpoint_v1.pth'
+        path = Path(__file__).parent / 'superpoint_v1.pth'
         self.load_state_dict(torch.load(str(path)))
 
         mk = self.config['max_keypoints']

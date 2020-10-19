@@ -1,6 +1,7 @@
 import os
 import argparse
 from model.Birdview.dataset import *
+from model.SapientNet.superpoint import *
 from torch.utils.data import DataLoader
 import numpy as np
 import torch
@@ -42,7 +43,7 @@ parser.add_argument('--negative_filter_radius', type=float, default=50, help='ne
 parser.add_argument('--saved_model_path', type=str,
                     default='/media/admini/lavie/dataset/birdview_dataset/saved_models', help='saved_model_path')
 parser.add_argument('--epochs', type=int, default=120, help='epochs')
-parser.add_argument('--load_checkpoints', type=bool, default=True, help='load_checkpoints')
+parser.add_argument('--load_checkpoints', type=bool, default=False, help='load_checkpoints')
 parser.add_argument('--num_clusters', type=int, default=64, help='num_clusters')
 parser.add_argument('--final_dim', type=int, default=256, help='final_dim')
 parser.add_argument('--log_path', type=str, default='logs', help='log_path')
@@ -121,7 +122,7 @@ def main():
     model = EmbedNet(base_model, net_vlad)
 
 
-
+    saved_model_file = os.path.join(args.saved_model_path, 'model-resnet18.pth.tar')
     if args.load_checkpoints:
         # base_model_checkpoint = torch.load(os.path.join(args.saved_model_path, 'base_model.pth.tar'),
         #                                    map_location=lambda storage, loc: storage)
@@ -129,10 +130,9 @@ def main():
         #                                  map_location=lambda storage, loc: storage)
         # base_model.load_state_dict(base_model_checkpoint)
         # net_vlad.load_state_dict(net_vlad_checkpoint)
-        model_checkpoint = torch.load(os.path.join(args.saved_model_path, 'model.pth.tar'),
-                                      map_location=lambda storage, loc: storage)
+        model_checkpoint = torch.load(saved_model_file, map_location=lambda storage, loc: storage)
         model.load_state_dict(model_checkpoint)
-        print("Loaded model checkpoints from \'{}\'.".format(os.path.join(args.saved_model_path, 'model.pth.tar')))
+        print("Loaded model checkpoints from \'{}\'.".format(saved_model_file))
 
     # base_model.train()
     # net_vlad.train()
@@ -153,6 +153,8 @@ def main():
             validate(model, validate_database_images_info, validate_query_images_info, validate_images_dir, writer=None)
             validate(model, train_database_images_info, train_query_images_info, train_images_dir, writer=None)
         train(epoch, model, optimizer, train_data_loader, writer=None)
+        torch.save(model.state_dict(), saved_model_file)
+        print("Saved models in \'{}\'.".format(saved_model_file))
 
 
 # TODO
@@ -211,8 +213,6 @@ def train(epoch, model, optimizer, train_data_loader, writer=None):
             del query, positives, negatives
     torch.cuda.empty_cache()
     # save model for each epoch
-    torch.save(model.state_dict(), os.path.join(args.saved_model_path, 'model.pth.tar'))
-    print("Saved models in \'{}\'.".format(os.path.join(args.saved_model_path, 'model.pth.tar')))
 
 
 # TODO
@@ -291,6 +291,8 @@ def model_test():
         del input, vlad_encoding, vladQ, vladP, vladN
         del query, positives, negatives
     torch.cuda.empty_cache()
+
+
 
 
 if __name__ == '__main__':
