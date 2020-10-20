@@ -8,13 +8,15 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 
 from model.Birdview.dataset import make_images_info
+from scipy.spatial.transform import Rotation as R
 
 
-def input_transforms():
+
+def input_transforms(meters_per_pixel=0.25):
     return transforms.Compose([
-        transforms.Resize(size=(400, 400)),
+        transforms.Resize(size=(int(100/meters_per_pixel), int(100/meters_per_pixel))),
         # transforms.RandomResizedCrop(size=(600, 960), scale=(0.8, 1.0), ratio=(0.75, 1.3333333333333333), interpolation=2),
-        transforms.RandomRotation(degrees=360),
+        # transforms.RandomRotation(degrees=360),
         # transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
         transforms.ToTensor(),
         # transforms.RandomErasing(p=0.3, scale=(0.02, 0.33), ratio=(0.3, 3.3)),
@@ -23,12 +25,14 @@ def input_transforms():
     ])
 
 
+
 class SuperglueDataset(Dataset):
-    def __init__(self, images_info, images_dir, transforms=input_transforms(), positive_search_radius=8):
+    def __init__(self, images_info, images_dir, transforms=input_transforms(), positive_search_radius=8, meters_per_pixel=2.5):
         super(SuperglueDataset, self).__init__()
         self.input_transforms = transforms
         self.images_info = images_info
         self.images_dir = images_dir
+        self.meters_per_pixel = meters_per_pixel
 
         self.for_database = False
 
@@ -64,6 +68,13 @@ class SuperglueDataset(Dataset):
             self.list_of_positives_indices.append(positive_indices)
             query_index += 1
 
+    @staticmethod
+    def _make_se3(translation, orientation):
+        tf = np.hstack([R.from_quat(orientation[[1, 2, 3, 0]]).as_matrix(),
+                                translation.reshape(3, 1)])
+        tf = np.vstack([tf, np.array([0, 0, 0, 1])])
+        return tf
+
     def __len__(self):
         return len(self.images_info)
 
@@ -75,7 +86,14 @@ class SuperglueDataset(Dataset):
         if self.input_transforms:
             query = self.input_transforms(query)
             positive = self.input_transforms(positive)
-        return query, positive
+        T_w_query = self._make_se3(self.images_info[index]['position'], self.images_info[index]['orientation'])
+        T_w_positive = self._make_se3(self.images_info[pos_index]['position'], self.images_info[pos_index]['orientation'])
+        T_query_positive = np.linalg.inv(T_w_query) @ T_w_positive
+
+        # convert translation in pixels
+        T_query_positive[:3,3] = T_query_positive[:3,3] / self.meters_per_pixel
+
+        return query, positive, T_query_positive
 
 
 if __name__ == '__main__':

@@ -130,6 +130,7 @@ class SuperPoint(nn.Module):
         self.convPa = nn.Conv2d(c4, c5, kernel_size=3, stride=1, padding=1)
         self.convPb = nn.Conv2d(c5, 65, kernel_size=1, stride=1, padding=0)
 
+        # can be trained here
         self.convDa = nn.Conv2d(c4, c5, kernel_size=3, stride=1, padding=1)
         self.convDb = nn.Conv2d(
             c5, self.config['descriptor_dim'],

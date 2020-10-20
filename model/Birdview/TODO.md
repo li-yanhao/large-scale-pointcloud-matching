@@ -10,10 +10,10 @@ birdview operation
     
     * ~~Feature detection (to look up)~~  
     
-    * **Feature detection: use Superpoint, with height, intensity,
-    occupancy binary value**  
+    * ~~Feature detection: use Superpoint, with height, intensity,
+    occupancy binary value~~
     
-    * Feature description and matching (almost done)
+    * Feature description and matching: to train
  
 3. Implement a tiny network to judge whether a birdview
 image is salient for global localization / loop closure

@@ -53,6 +53,12 @@ super_glue_config = {
 si le processus de NetVLAD+SuperPoint+SuperGlue est effectif)
 
 * Train superglue
+
+* validate superglue
+
+* check if superglue matching labels are correct
+
+*
  
 
 ## Experiment results

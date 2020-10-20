@@ -28,6 +28,7 @@ def input_transforms():
 
 def input_transforms_test():
     return transforms.Compose([
+        # transforms.Resize(size=(300, 300)),
         transforms.ToTensor(),
         # transforms.Normalize(mean=[0.485, 0.456, 0.406],
         #                      std=[0.229, 0.224, 0.225]),

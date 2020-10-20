@@ -283,4 +283,5 @@ class SuperGlue(nn.Module):
             'matches1': indices1, # use -1 for invalid match
             'matching_scores0': mscores0,
             'matching_scores1': mscores1,
+            'scores': scores,
         }

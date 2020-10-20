@@ -282,6 +282,7 @@ if __name__ == "__main__":
 
 
         viz = visdom.Visdom()
+        viz.scatter()
         win_loss = viz.scatter(X=np.asarray([[0, 0]]))
         win_precision = viz.scatter(X=np.asarray([[0, 0]]))
         win_recall = viz.scatter(X=np.asarray([[0, 0]]))

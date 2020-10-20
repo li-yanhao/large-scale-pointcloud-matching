@@ -208,8 +208,6 @@ def superglue_match(target_image, source_image, matching=None, device=None, reso
         return tf(frame).float()[None].to(device)
         # return torch.from_numpy(frame/255.).float()[None, None].to(device)
 
-
-
     target_frame_tensor = frame2tensor(target_image, device)
     source_frame_tensor = frame2tensor(source_image, device)
 
@@ -223,6 +221,7 @@ def superglue_match(target_image, source_image, matching=None, device=None, reso
     mkpts0 = kpts0[valid]
     mkpts1 = kpts1[matches[valid]]
     # print(mkpts0, mkpts1)
+
     return mkpts0, mkpts1
 
 
@@ -279,6 +278,8 @@ def pipeline_test():
             source_image = Image.open(os.path.join(images_dir, query_image_info['image_file']))
 
             target_kpts, source_kpts = superglue_match(target_image, source_image, matching, resolution=resolution)
+            target_kpts -= resolution / 2
+            source_kpts -= resolution / 2
             # T_target_source, score = compute_relative_pose_with_ransac(target_kpts, source_kpts)
             T_target_source, score = compute_relative_pose(target_kpts, source_kpts), len(target_kpts)
             if score is None:
@@ -289,11 +290,11 @@ def pipeline_test():
                                             [T_target_source[1,0], T_target_source[1,1], 0, T_target_source[1,2]*meters_per_pixel],
                                             [0, 0, 1, 0],
                                             [0, 0, 0, 1]])
-                T_target_source = np.array(
-                    [[1, 0, 0, 0],
-                     [0, 1, 0, 0],
-                     [0, 0, 1, 0],
-                     [0, 0, 0, 1]])
+                # T_target_source = np.array(
+                #     [[1, 0, 0, 0],
+                #      [0, 1, 0, 0],
+                #      [0, 0, 1, 0],
+                #      [0, 0, 0, 1]])
                 T_w_target = np.hstack([R.from_quat(query_result['orientation'][[1,2,3,0]]).as_matrix(), query_result['position'].reshape(3,1)])
                 T_w_target = np.vstack([T_w_target, np.array([0,0,0,1])])
                 T_w_source_best = T_w_target @ T_target_source
@@ -330,22 +331,22 @@ if __name__ == '__main__':
     #########################
     # pose computation test #
     #########################
-    N = 100
-    alpha = np.random.rand() * 3.14
-    rotation = np.array([[np.cos(alpha), -np.sin(alpha)], [np.sin(alpha), np.cos(alpha)]])
-    translation = np.random.randn(2, 1) * 20
-    T_target_source = np.hstack([rotation, translation])
-    T_target_source = np.vstack([T_target_source, np.array([0, 0, 1])])
-    T_source_target = np.linalg.inv(T_target_source)
-
-    print("T_target_source ground truth: \n", T_target_source)
-    target_points = np.random.randn(N, 2)
-    source_points = (T_source_target[:2, :2] @ target_points.transpose()).transpose() + T_source_target[:2, 2]
-
-    T_target_source = compute_relative_pose_with_ransac(target_points, source_points)
-    print("T_target_source once: \n", T_target_source)
-    T_target_source = compute_relative_pose(target_points, source_points)
-    print("T_target_source ransac: \n", T_target_source)
+    # N = 100
+    # alpha = np.random.rand() * 3.14
+    # rotation = np.array([[np.cos(alpha), -np.sin(alpha)], [np.sin(alpha), np.cos(alpha)]])
+    # translation = np.random.randn(2, 1) * 20
+    # T_target_source = np.hstack([rotation, translation])
+    # T_target_source = np.vstack([T_target_source, np.array([0, 0, 1])])
+    # T_source_target = np.linalg.inv(T_target_source)
+    #
+    # print("T_target_source ground truth: \n", T_target_source)
+    # target_points = np.random.randn(N, 2)
+    # source_points = (T_source_target[:2, :2] @ target_points.transpose()).transpose() + T_source_target[:2, 2]
+    #
+    # T_target_source = compute_relative_pose_with_ransac(target_points, source_points)
+    # print("T_target_source once: \n", T_target_source)
+    # T_target_source = compute_relative_pose(target_points, source_points)
+    # print("T_target_source ransac: \n", T_target_source)
 
     ###########################
     # Superglue matching test #
