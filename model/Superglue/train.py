@@ -69,7 +69,7 @@ def make_ground_truth_matrix(target_kpts, source_kpts, T_target_source, pixel_to
     source_kpts_3d_in_target = source_kpts_3d @ T_target_source[0:3,0:3].transpose(0,1).float() + T_target_source[0:3,3]
     diff = target_kpts_3d[:,:2].view(M,2,1) - source_kpts_3d_in_target[:,:2].transpose(0,1).view(1,2,N)
     sqr_distances = torch.einsum('mdn,mdn->mn', diff, diff)
-    ground_truth_mask_matrix = sqr_distances < (pixel_tolerance**2)
+    ground_truth_mask_matrix = (sqr_distances < (pixel_tolerance**2)).float()
     dustbin_target = torch.ones(M) - ground_truth_mask_matrix.sum(dim=1)
     dustbin_target[dustbin_target<0] = 0
     dustbin_source = torch.ones(N) - ground_truth_mask_matrix.sum(dim=0)
@@ -104,6 +104,8 @@ def make_ground_truth_matrix_test():
     print("T_target_source ground truth: \n", T_target_source)
     target_points = np.random.randn(N, 2) * 500
     source_points = (T_source_target[:2, :2] @ target_points.transpose()).transpose() + T_source_target[:2, 2]
+    target_points = np.vstack([target_points, np.array([1200, 1200])])
+    source_points = np.vstack([source_points, np.array([1000,1000])])
     target_points = torch.Tensor(target_points)
     source_points = torch.Tensor(source_points)
 
@@ -245,7 +247,7 @@ def train(epoch, model, optimizer, data_loader, viz_train=None):
             match_mask_ground_truth = make_ground_truth_matrix(target_kpts, source_kpts, T_target_source[0],
                                                                args.pixel_tolerance)
             # print(match_mask_ground_truth[:-1,:-1].sum())
-            accum_true_pairs += match_mask_ground_truth[:-1,:-1].sum()
+
             # match_mask_ground_truth
             # matches = pred['matches0'][0].cpu().numpy()
             # confidence = pred['matching_scores0'][0].cpu().detach().numpy()
@@ -264,6 +266,7 @@ def train(epoch, model, optimizer, data_loader, viz_train=None):
             accum_accuracy += float(metrics['matches0_acc'])
             accum_recall += float(metrics['matches0_recall'])
             accum_precision += float(metrics['matches0_precision'])
+            accum_true_pairs += match_mask_ground_truth[:-1, :-1].sum()
 
             if iteration % 50 == 0:
                 print("loss: {}".format(accum_loss / 50))
@@ -302,5 +305,5 @@ def train(epoch, model, optimizer, data_loader, viz_train=None):
 
 
 if __name__ == '__main__':
-    # make_ground_truth_matrix_test()
-    main()
+    make_ground_truth_matrix_test()
+    # main()
