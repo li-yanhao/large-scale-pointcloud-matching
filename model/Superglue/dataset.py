@@ -27,9 +27,9 @@ def input_transforms(meters_per_pixel=0.25):
 
 
 class SuperglueDataset(Dataset):
-    def __init__(self, images_info, images_dir, transforms=input_transforms(), positive_search_radius=8, meters_per_pixel=2.5):
+    def __init__(self, images_info, images_dir, positive_search_radius=8, meters_per_pixel=0.25):
         super(SuperglueDataset, self).__init__()
-        self.input_transforms = transforms
+        self.input_transforms = input_transforms(meters_per_pixel)
         self.images_info = images_info
         self.images_dir = images_dir
         self.meters_per_pixel = meters_per_pixel
