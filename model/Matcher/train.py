@@ -73,7 +73,7 @@ def train():
         os.path.join(args.checkpoints_dir, descnet_ckp_filename)))
 
 
-    # superglue can be trained from scratch
+    # Superglue can be trained from scratch
     super_glue_config = {
         'descriptor_dim': descriptor_dim,
         'weights': '',
@@ -84,11 +84,11 @@ def train():
     }
     superglue = SuperGlue(super_glue_config)
     superglue = superglue.to(dev)
-    superglue_ckp_filename = "superglue-32-kitti00.pth"
+    superglue_ckp_filename = "Superglue-32-kitti00.pth"
     if args.load_superglue:
         superglue.load_state_dict(torch.load(os.path.join(args.checkpoints_dir, superglue_ckp_filename), map_location=dev))
 
-    # only train superglue
+    # only train Superglue
     opt = optim.Adam(superglue.parameters(), lr=args.learning_rate, weight_decay=2e-6)
     num_epochs = 5
 
@@ -137,7 +137,7 @@ def train():
             # for i in range(len(segments_B)):
             #     descriptors_B.append(model(segment, dev))
 
-            # Train superglue
+            # Train Superglue
             match_output = superglue(data)
             loss = -match_output['scores'] * match_mask_ground_truth.to(dev)
             loss = loss.sum()
@@ -181,7 +181,7 @@ def train():
             if item_idx % 200 == 0:
                 # TODO: save weight file
                 torch.save(superglue.state_dict(), os.path.join(args.checkpoints_dir, superglue_ckp_filename))
-                print("superglue model saved in {}".format(os.path.join(args.checkpoints_dir, superglue_ckp_filename)))
+                print("Superglue model saved in {}".format(os.path.join(args.checkpoints_dir, superglue_ckp_filename)))
 
 
 if __name__ == '__main__':

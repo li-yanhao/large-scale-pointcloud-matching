@@ -6,8 +6,8 @@ print(sys.path)
 
 import numpy as np
 import torch
-# from SapientNet.superglue import SuperGlue
-from superglue import SuperGlue
+# from SapientNet.Superglue import SuperGlue
+from model.Superglue import SuperGlue
 
 from sapientnet_with_dgcnn import DgcnnModel
 import open3d as o3d
@@ -84,7 +84,7 @@ def match_pipeline(submap_dict_A : dict, submap_dict_B : dict):
         'match_threshold': 0.1,
     }
     superglue = SuperGlue(super_glue_config)
-    superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue-dgcnn-no-dropout.pth"), map_location=dev))
+    superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "Superglue-dgcnn-no-dropout.pth"), map_location=dev))
 
     model.train()
     superglue.train()

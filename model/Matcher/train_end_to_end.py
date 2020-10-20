@@ -77,7 +77,7 @@ def train():
             os.path.join(args.checkpoints_dir, descnet_ckp_filename)))
     descnet.to(dev)
 
-    # superglue can be trained from scratch
+    # Superglue can be trained from scratch
     super_glue_config = {
         'descriptor_dim': descriptor_dim,
         'weights': '',
@@ -88,11 +88,11 @@ def train():
     }
     superglue = SuperGlue(super_glue_config)
     superglue = superglue.to(dev)
-    superglue_ckp_filename = "superglue-256-dgcnn-e2e-kitti00.pth"
+    superglue_ckp_filename = "Superglue-256-dgcnn-e2e-kitti00.pth"
     if args.load_superglue:
         superglue.load_state_dict(torch.load(os.path.join(args.checkpoints_dir, superglue_ckp_filename), map_location=dev))
 
-    # train superglue and descnet
+    # train Superglue and descnet
 
     opt = optim.Adam(list(descnet.parameters()) + list(superglue.parameters()), lr=1e-4, weight_decay=2e-6)
 
@@ -143,7 +143,7 @@ def train():
             # for i in range(len(segments_B)):
             #     descriptors_B.append(model(segment, dev))
 
-            # Train superglue
+            # Train Superglue
             match_output = superglue(data)
             match_loss = -match_output['scores'] * match_mask_ground_truth.to(dev)
             rot_A_B, trans_A_B = torch_icp(centers_A.to(dev)[:,:,:3], centers_B.to(dev)[:,:,:3], match_output['scores'][:,:-1,:-1])
@@ -205,7 +205,7 @@ def train():
                 torch.save(descnet.state_dict(), os.path.join(args.checkpoints_dir, descnet_ckp_filename))
                 torch.save(superglue.state_dict(), os.path.join(args.checkpoints_dir, superglue_ckp_filename))
                 print("descnet model saved in {}".format(os.path.join(args.checkpoints_dir, descnet_ckp_filename)))
-                print("superglue model saved in {}".format(os.path.join(args.checkpoints_dir, superglue_ckp_filename)))
+                print("Superglue model saved in {}".format(os.path.join(args.checkpoints_dir, superglue_ckp_filename)))
 
 
 if __name__ == '__main__':

@@ -33,6 +33,7 @@ def input_transforms_test():
         #                      std=[0.229, 0.224, 0.225]),
     ])
 
+
 def is_image_file(filename):
     return any(filename.lower().endswith(extension) for extension in ['.bmp', '.png', '.jpg', '.jpeg'])
 
@@ -53,6 +54,7 @@ def make_images_info(struct_filename=None, images_dir=None):
                     'image_file': split[0],
                     'timestamp': float(split[1]),
                     'position': np.array([float(split[2]), float(split[3]), float(split[4])]),
+                    # w, x, y, z
                     'orientation': np.array(
                         [float(split[5]), float(split[6]), float(split[7]), float(split[8])])
                 })

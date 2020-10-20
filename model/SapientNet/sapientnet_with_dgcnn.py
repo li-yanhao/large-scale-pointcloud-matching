@@ -10,7 +10,7 @@ import torch.optim as optim
 from dgl.nn.pytorch import KNNGraph, EdgeConv
 from dgl.nn.pytorch.glob import GlobalAttentionPooling
 
-from superglue import SuperGlue
+from model.Superglue import SuperGlue
 from dataset import GlueNetDataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -270,7 +270,7 @@ if __name__ == "__main__":
         superglue = SuperGlue(super_glue_config)
         superglue = superglue.to(dev)
 
-        superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue-dgcnn-kitti00.pth"), map_location=dev))
+        superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "Superglue-dgcnn-kitti00.pth"), map_location=dev))
 
         opt = optim.Adam(list(model.parameters()) + list(superglue.parameters()), lr=1e-4, weight_decay=2e-6)
         num_epochs = 5
@@ -350,7 +350,7 @@ if __name__ == "__main__":
                 if item_idx % 200 == 0:
                     # TODO: save weight file
                     torch.save(model.state_dict(), os.path.join(DATA_DIR, "model-dgcnn-kitti00.pth"))
-                    torch.save(superglue.state_dict(), os.path.join(DATA_DIR, "superglue-dgcnn-kitti00.pth"))
+                    torch.save(superglue.state_dict(), os.path.join(DATA_DIR, "Superglue-dgcnn-kitti00.pth"))
                     print("model weights saved in {}".format(DATA_DIR))
 
                 # TODO: draw a curve to supervise
@@ -382,7 +382,7 @@ if __name__ == "__main__":
             'match_threshold': 0.1,
         }
         superglue = SuperGlue(super_glue_config)
-        superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue-dgcnn-no-dropout.pth"), map_location=dev))
+        superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "Superglue-dgcnn-no-dropout.pth"), map_location=dev))
 
         model.train()
         superglue.train()

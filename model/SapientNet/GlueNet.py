@@ -268,7 +268,7 @@ if RUN_PIPELINE:
     }
     superglue = SuperGlue(super_glue_config)
     superglue = superglue.to(dev)
-    superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue.pth"), map_location=dev))
+    superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "Superglue.pth"), map_location=dev))
 
     opt = optim.Adam(list(model.parameters()) + list(superglue.parameters()), lr=5e-5, weight_decay=2e-6)
     num_epochs = 5
@@ -329,7 +329,7 @@ if RUN_PIPELINE:
             if item_idx % 200 == 0:
                 # TODO: save weight file
                 torch.save(model.state_dict(), os.path.join(DATA_DIR, "model.pth"))
-                torch.save(superglue.state_dict(), os.path.join(DATA_DIR, "superglue.pth"))
+                torch.save(superglue.state_dict(), os.path.join(DATA_DIR, "Superglue.pth"))
                 print("model weights saved in {}".format(DATA_DIR))
 
             # TODO: draw a curve to supervise

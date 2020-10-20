@@ -4,16 +4,12 @@ import os
 sys.path.append(os.path.dirname(__file__))
 print(sys.path)
 
-import numpy as np
 import torch
-# from SapientNet.superglue import SuperGlue
-from superglue import SuperGlue
+# from SapientNet.Superglue import SuperGlue
+from model.Superglue.superglue import SuperGlue
 
 from sapientnet_with_dgcnn import DgcnnModel
-import open3d as o3d
-import matplotlib.pyplot as plt
-import h5py
-from scipy.spatial.transform import Rotation as R
+
 
 def extract_descriptors():
     pass
@@ -35,7 +31,7 @@ super_glue_config = {
     'match_threshold': 0.2,
 }
 superglue = SuperGlue(super_glue_config)
-superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "superglue-dgcnn-no-dropout.pth"), map_location=dev))
+superglue.load_state_dict(torch.load(os.path.join(DATA_DIR, "Superglue-dgcnn-no-dropout.pth"), map_location=dev))
 
 model.train()
 superglue.train()

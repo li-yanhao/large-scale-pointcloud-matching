@@ -52,7 +52,7 @@ super_glue_config = {
 * Add a model to recognize whether the global localization is good or bad. (Pas necessaire 
 si le processus de NetVLAD+SuperPoint+SuperGlue est effectif)
 
-
+* Train superglue
  
 
 ## Experiment results

@@ -29,17 +29,17 @@ parser.add_argument('--mode', type=str, default='train', help='Mode', choices=['
 parser.add_argument('--batch_size', type=int, default=2, help='batch_size')
 parser.add_argument('--dataset_dir', type=str, default='/media/admini/lavie/dataset/birdview_dataset/', help='dataset_dir')
 parser.add_argument('--sequence_train', type=str, default='00', help='sequence_train')
-parser.add_argument('--sequence_validate', type=str, default='08', help='sequence_validate')
+parser.add_argument('--sequence_validate', type=str, default='05', help='sequence_validate')
 
 # parser.add_argument('--dataset_dir', type=str, default='/home/li/Documents/wayz/image_data/dataset', help='dataset_dir')
 parser.add_argument('--num_workers', type=int, default=1, help='num_workers')
 # parser.add_argument('--from_scratch', type=bool, default=True, help='from_scratch')
 parser.add_argument('--pretrained_embedding', type=bool, default=False, help='pretrained_embedding')
 parser.add_argument('--num_similar_neg', type=int, default=4, help='number of similar negative samples')
-parser.add_argument('--margin', type=float, default=0.5, help='margin')
+parser.add_argument('--margin', type=float, default=1.0, help='margin')
 parser.add_argument('--use_gpu', type=bool, default=True, help='use_gpu')
-parser.add_argument('--learning_rate', type=float, default=0.0005, help='learning_rate')
-parser.add_argument('--positive_search_radius', type=float, default=8, help='positive_search_radius')
+parser.add_argument('--learning_rate', type=float, default=0.0001, help='learning_rate')
+parser.add_argument('--positive_search_radius', type=float, default=7.5, help='positive_search_radius')
 parser.add_argument('--negative_filter_radius', type=float, default=50, help='negative_filter_radius')
 parser.add_argument('--saved_model_path', type=str,
                     default='/media/admini/lavie/dataset/birdview_dataset/saved_models', help='saved_model_path')
@@ -125,7 +125,7 @@ def main():
     model = EmbedNet(base_model, net_vlad)
 
 
-    saved_model_file = os.path.join(args.saved_model_path, 'model-resnet18.pth.tar')
+    saved_model_file = os.path.join(args.saved_model_path, 'model-lazy-triplet.pth.tar')
     if args.load_checkpoints:
         # base_model_checkpoint = torch.load(os.path.join(args.saved_model_path, 'base_model.pth.tar'),
         #                                    map_location=lambda storage, loc: storage)
@@ -151,13 +151,11 @@ def main():
     for epoch in range(args.epochs):
         # validate(model, train_images_info, validation_images_info, writer=None)
         epoch = epoch + 1
-
-        train(epoch, model, optimizer, train_data_loader, writer=None)
-        torch.save(model.state_dict(), saved_model_file)
         if epoch % 1 == 0:
             validate(model, validate_database_images_info, validate_query_images_info, validate_images_dir, writer=None)
             validate(model, train_database_images_info, train_query_images_info, train_images_dir, writer=None)
-
+        train(epoch, model, optimizer, train_data_loader, writer=None)
+        torch.save(model.state_dict(), saved_model_file)
         print("Saved models in \'{}\'.".format(saved_model_file))
 
 
@@ -239,7 +237,7 @@ def validate(model, database_images_info, query_images_info, images_dir, writer=
     true_count = 0
     for query_image_info in tqdm(query_images_info):
         query_results = image_database.query_image(
-            image_filename=os.path.join(images_dir, query_image_info['image_file']), num_results=3)
+            image_filename=os.path.join(images_dir, query_image_info['image_file']), num_results=1)
         # print('query_result: \n{}'.format(query_results))
         for query_result in query_results:
             diff = query_image_info['position'] - query_result['position']
@@ -306,8 +304,6 @@ def model_test():
         del input, vlad_encoding, vladQ, vladP, vladN
         del query, positives, negatives
     torch.cuda.empty_cache()
-
-
 
 
 if __name__ == '__main__':
