@@ -42,23 +42,31 @@ super_glue_config = {
 
 * ~~sinkhorn (optimal transport) + dustbin + svd = partially overlapped point cloud registration~~
 
-* NetVLAD for birdview image retrieval (Precision~0.7, Optimizer encore le modele pour
- atteindre 85% si possible)
+* ~~NetVLAD for birdview image retrieval (Precision~0.7, Optimizer encore le modele pour
+ atteindre 85% si possible)~~
 
-* SuperPoint + SuperGlue for relative pose computation (le reseau pretraine 
+* ~~SuperPoint + SuperGlue for relative pose computation (le reseau pretraine 
  marche tres bien deja, il faudra juste adapter les APIs pour
- localisation globale. S'il nous reste encore du temps, trainer le SuperPoint + SuperGlue)
+ localisation globale. S'il nous reste encore du temps, entrainer le SuperPoint + SuperGlue)~~
 
 * Add a model to recognize whether the global localization is good or bad. (Pas necessaire 
 si le processus de NetVLAD+SuperPoint+SuperGlue est effectif)
 
-* Train superglue
+* ~~Train superglue~~
 
-* validate superglue
+* ~~validate superglue~~
 
-* check if superglue matching labels are correct
+* ~~check if superglue matching labels are correct~~
 
-*
+* ~~Fix the data preprocessing bug: SHOULD NOT CENTER THE POINTS IN A SUBMAP !!!!~~
+
+* Generate data of Wayz
+
+* Generate data of nclt
+
+* Debug metrics (precision, recall, TF1, AUC,)
+
+
  
 
 ## Experiment results

@@ -10,10 +10,11 @@ from PIL import Image
 from sklearn.model_selection import train_test_split
 from matplotlib import pyplot as plt
 import argparse
+from model.Superglue.dataset import pts_from_meter_to_pixel, pts_from_pixel_to_meter
+
 
 # 1. create database
 # 2. query a lidar scan (birdview image)
-
 
 
 parser = argparse.ArgumentParser(description='GlobalLocalization')
@@ -21,24 +22,21 @@ parser.add_argument('--mode', type=str, default='train', help='Mode', choices=['
 # parser.add_argument('--batch_size', type=int, default=2, help='batch_size')
 parser.add_argument('--dataset_dir', type=str, default='/media/admini/lavie/dataset/birdview_dataset/', help='dataset_dir')
 # parser.add_argument('--dataset_dir', type=str, default='/media/li/LENOVO/dataset/kitti/lidar_odometry/birdview_dataset', help='dataset_dir')
-parser.add_argument('--sequence', type=str, default='08', help='sequence')
+parser.add_argument('--sequence', type=str, default='00', help='sequence')
 
 # parser.add_argument('--dataset_dir', type=str, default='/home/li/Documents/wayz/image_data/dataset', help='dataset_dir')
 parser.add_argument('--num_workers', type=int, default=1, help='num_workers')
 # parser.add_argument('--from_scratch', type=bool, default=True, help='from_scratch')
 parser.add_argument('--pretrained_embedding', type=bool, default=False, help='pretrained_embedding')
 parser.add_argument('--num_similar_neg', type=int, default=4, help='number of similar negative samples')
-# parser.add_argument('--margin', type=float, default=0.5, help='margin')
 parser.add_argument('--use_gpu', type=bool, default=True, help='use_gpu')
-# parser.add_argument('--learning_rate', type=float, default=0.0005, help='learning_rate')
 parser.add_argument('--positive_search_radius', type=float, default=8, help='positive_search_radius')
-parser.add_argument('--negative_filter_radius', type=float, default=50, help='negative_filter_radius')
 parser.add_argument('--saved_model_path', type=str,
                     default='/media/admini/lavie/dataset/birdview_dataset/saved_models', help='saved_model_path')
 parser.add_argument('--epochs', type=int, default=120, help='epochs')
-# parser.add_argument('--load_checkpoints', type=bool, default=True, help='load_checkpoints')
 parser.add_argument('--num_clusters', type=int, default=64, help='num_clusters')
 parser.add_argument('--final_dim', type=int, default=256, help='final_dim')
+parser.add_argument('--meters_per_pixel', type=float, default=0.25, help='meters_per_pixel')
 args = parser.parse_args()
 
 
@@ -182,7 +180,7 @@ def compute_relative_pose_with_ransac(target_keypoints, source_keypoints):
     return T_target_source_best, score
 
 
-def superglue_match(target_image, source_image, matching=None, device=None, resolution=400):
+def superglue_match(target_image, source_image, resolution : int, matching=None, device=None):
     config = {
         'superpoint': {
             'nms_radius': 4,
@@ -232,15 +230,15 @@ def pipeline_test():
     net_vlad = NetVLAD(num_clusters=args.num_clusters, dim=256, alpha=1.0, outdim=args.final_dim)
     model = EmbedNet(base_model, net_vlad)
 
-    saved_model_file = os.path.join(args.saved_model_path, 'model-lazy-triplet.pth.tar')
-    model_checkpoint = torch.load(saved_model_file, map_location=lambda storage, loc: storage)
+    saved_model_file_bevnet = os.path.join(args.saved_model_path, 'model-lazy-triplet.pth.tar')
+    model_checkpoint = torch.load(saved_model_file_bevnet, map_location=lambda storage, loc: storage)
     model.load_state_dict(model_checkpoint)
-    print("Loaded model checkpoints from \'{}\'.".format(saved_model_file))
+    print("Loaded bevnet checkpoints from \'{}\'.".format(saved_model_file_bevnet))
 
     images_dir = os.path.join(args.dataset_dir, args.sequence)
     images_info_validate = make_images_info(
         struct_filename=os.path.join(args.dataset_dir, 'struct_file_' + args.sequence + '.txt'))
-    database_images_info, query_images_info = train_test_split(images_info_validate, test_size=0.1,
+    database_images_info, query_images_info = train_test_split(images_info_validate, test_size=0.2,
                                                                random_state=10)
     image_database = ImageDatabase(images_info=database_images_info,
                                    images_dir=images_dir, model=model,
@@ -262,6 +260,12 @@ def pipeline_test():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     matching = Matching(config).eval().to(device)
 
+
+    saved_model_file_superglue = os.path.join(args.saved_model_path, 'superglue-lidar-birdview.pth.tar')
+    model_checkpoint = torch.load(saved_model_file_superglue, map_location=lambda storage, loc: storage)
+    matching.load_state_dict(model_checkpoint)
+    print("Loaded superglue checkpoints from \'{}\'.".format(saved_model_file_superglue))
+
     translation_errors = []
     true_count = 0
     for query_image_info in tqdm(query_images_info):
@@ -271,23 +275,26 @@ def pipeline_test():
         best_score = -1
         T_w_source_best = None
         min_inliers = 30
-        resolution = 400
-        meters_per_pixel = 100 / resolution
+        resolution = int(100 / args.meters_per_pixel)
         for query_result in query_results:
             target_image = Image.open(os.path.join(images_dir, query_result['image_file']))
             source_image = Image.open(os.path.join(images_dir, query_image_info['image_file']))
 
-            target_kpts, source_kpts = superglue_match(target_image, source_image, matching, resolution=resolution)
-            target_kpts -= resolution / 2
-            source_kpts -= resolution / 2
-            # T_target_source, score = compute_relative_pose_with_ransac(target_kpts, source_kpts)
-            T_target_source, score = compute_relative_pose(target_kpts, source_kpts), len(target_kpts)
+            target_kpts, source_kpts = superglue_match(target_image, source_image, resolution, matching)
+            target_kpts_in_meters = pts_from_pixel_to_meter(target_kpts, args.meters_per_pixel)
+            source_kpts_in_meters = pts_from_pixel_to_meter(source_kpts, args.meters_per_pixel)
+
+            # target_kpts_in_meters = (target_kpts - resolution / 2) * meters_per_pixel
+            # source_kpts_in_meters = (source_kpts - resolution / 2) * meters_per_pixel
+            # T_target_source, score = compute_relative_pose_with_ransac(target_kpts_in_meters, source_kpts_in_meters)
+            T_target_source, score = compute_relative_pose(target_kpts_in_meters, source_kpts_in_meters), len(target_kpts)
             if score is None:
                 continue
             if score > best_score and score > min_inliers:
                 best_score = score
-                T_target_source = np.array([[T_target_source[0,0], T_target_source[0,1], 0, T_target_source[0,2]*meters_per_pixel],
-                                            [T_target_source[1,0], T_target_source[1,1], 0, T_target_source[1,2]*meters_per_pixel],
+                # TODO: the way we handle the se3 may be inappropriate
+                T_target_source = np.array([[T_target_source[0,0], T_target_source[0,1], 0, T_target_source[0,2]],
+                                            [T_target_source[1,0], T_target_source[1,1], 0, T_target_source[1,2]],
                                             [0, 0, 1, 0],
                                             [0, 0, 0, 1]])
                 # T_target_source = np.array(
@@ -313,7 +320,7 @@ def pipeline_test():
             print('Global localization failed.')
     translation_errors = np.array(translation_errors)
     print('Mean translation error: {}'.format(translation_errors.mean()))
-    for r in range(1,10):
+    for r in [0.1, 0.2, 0.3, 0.5, 0.8, 1.0, 2, 3, 4, 5, 6, 7, 8, 9, 10]:
         print('Percentage under {} m: {}'.format(r, (translation_errors<r).sum() / len(translation_errors)))
 
     plt.scatter(np.linspace(0, 50, num=len(translation_errors)), np.array(translation_errors))

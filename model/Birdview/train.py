@@ -39,7 +39,7 @@ parser.add_argument('--num_similar_neg', type=int, default=4, help='number of si
 parser.add_argument('--margin', type=float, default=1.0, help='margin')
 parser.add_argument('--use_gpu', type=bool, default=True, help='use_gpu')
 parser.add_argument('--learning_rate', type=float, default=0.0001, help='learning_rate')
-parser.add_argument('--positive_search_radius', type=float, default=7.5, help='positive_search_radius')
+parser.add_argument('--positive_search_radius', type=float, default=10, help='positive_search_radius')
 parser.add_argument('--negative_filter_radius', type=float, default=50, help='negative_filter_radius')
 parser.add_argument('--saved_model_path', type=str,
                     default='/media/admini/lavie/dataset/birdview_dataset/saved_models', help='saved_model_path')

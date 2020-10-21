@@ -11,8 +11,17 @@ from model.Birdview.dataset import make_images_info
 from scipy.spatial.transform import Rotation as R
 
 
+def pts_from_pixel_to_meter(pts_in_pixels, meters_per_pixel):
+    pts_in_meters = pts_in_pixels[:,[1,0]] * meters_per_pixel - 50
+    return pts_in_meters
 
-def input_transforms(meters_per_pixel=0.25):
+
+def pts_from_meter_to_pixel(pts_in_meters, meters_per_pixel):
+    pts_in_pixels = (pts_in_meters[:,[1,0]] + 50) / meters_per_pixel
+    return pts_in_pixels
+
+
+def input_transforms(meters_per_pixel):
     return transforms.Compose([
         transforms.Resize(size=(int(100/meters_per_pixel), int(100/meters_per_pixel))),
         # transforms.RandomResizedCrop(size=(600, 960), scale=(0.8, 1.0), ratio=(0.75, 1.3333333333333333), interpolation=2),
@@ -60,12 +69,13 @@ class SuperglueDataset(Dataset):
 
             # positive_indices = tmp_positive_indices
             i += 1
-            assert len(positive_indices) > 0
+
+            assert len(positive_indices) >= 2
             # probabilities = np.array(probabilities)
             # probabilities /= probabilities.sum()
             # self.list_of_positives_indices.append(
             #     np.random.choice(positive_indices, 1, replace=True))
-            self.list_of_positives_indices.append(positive_indices)
+            self.list_of_positives_indices.append(positive_indices[1:])
             query_index += 1
 
     @staticmethod
@@ -79,6 +89,9 @@ class SuperglueDataset(Dataset):
         return len(self.images_info)
 
     def __getitem__(self, index):
+        # query, query image, W * H
+        # positive: positive image, W * H
+        # T_query_positive: SE3 transform, 4 * 4, unit=meters
         query = Image.open(os.path.join(self.images_dir, self.images_info[index]['image_file']))
         pos_indices = self.list_of_positives_indices[index]
         pos_index = np.random.choice(pos_indices, 1, replace=True)[0]
@@ -91,7 +104,7 @@ class SuperglueDataset(Dataset):
         T_query_positive = np.linalg.inv(T_w_query) @ T_w_positive
 
         # convert translation in pixels
-        T_query_positive[:3,3] = T_query_positive[:3,3] / self.meters_per_pixel
+        # T_query_positive[:3,3] = T_query_positive[:3,3] / self.meters_per_pixel
 
         return query, positive, T_query_positive
 
