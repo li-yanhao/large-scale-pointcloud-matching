@@ -20,14 +20,14 @@ import cv2
 
 parser = argparse.ArgumentParser(description='SuperglueTrain')
 parser.add_argument('--mode', type=str, default='train', help='Mode', choices=['train', 'test'])
-parser.add_argument('--batch_size', type=int, default=4, help='batch_size')
+parser.add_argument('--batch_size', type=int, default=6, help='batch_size')
 parser.add_argument('--dataset_dir', type=str, default='/media/admini/lavie/dataset/birdview_dataset/', help='dataset_dir')
-parser.add_argument('--sequence_train', type=str, default='02', help='sequence_train')
-parser.add_argument('--sequence_validate', type=str, default='02', help='sequence_validate')
+parser.add_argument('--sequence_train', type=str, default='00', help='sequence_train')
+parser.add_argument('--sequence_validate', type=str, default='05', help='sequence_validate')
 parser.add_argument('--num_workers', type=int, default=1, help='num_workers')
 parser.add_argument('--use_gpu', type=bool, default=True, help='use_gpu')
-parser.add_argument('--learning_rate', type=float, default=0.0002, help='learning_rate')
-parser.add_argument('--positive_search_radius', type=float, default=2, help='positive_search_radius')
+parser.add_argument('--learning_rate', type=float, default=0.0003, help='learning_rate')
+parser.add_argument('--positive_search_radius', type=float, default=8, help='positive_search_radius')
 parser.add_argument('--saved_model_path', type=str,
                     default='/media/admini/lavie/dataset/birdview_dataset/saved_models', help='saved_model_path')
 parser.add_argument('--epochs', type=int, default=120, help='epochs')
@@ -158,10 +158,10 @@ def main():
     train_images_dir = os.path.join(args.dataset_dir, args.sequence_train)
     validate_images_dir = os.path.join(args.dataset_dir, args.sequence_validate)
 
-    train_database_images_info, train_query_images_info = train_test_split(images_info_train, test_size=0.1,
-                                                                           random_state=23)
-    validate_database_images_info, validate_query_images_info = train_test_split(images_info_validate, test_size=0.2,
-                                                                                 random_state=23)
+    # train_database_images_info, train_query_images_info = train_test_split(images_info_train, test_size=0.1,
+    #                                                                        random_state=23)
+    # validate_database_images_info, validate_query_images_info = train_test_split(images_info_validate, test_size=0.2,
+    #                                                                              random_state=23)
 
     train_dataset = SuperglueDataset(images_info=images_info_train, images_dir=train_images_dir,
                                      positive_search_radius=args.positive_search_radius,
@@ -172,7 +172,7 @@ def main():
     train_data_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     validate_data_loader = DataLoader(validate_dataset, batch_size=1, shuffle=True)
 
-    saved_model_file = os.path.join(args.saved_model_path, 'superglue-lidar-birdview.pth.tar')
+    saved_model_file = os.path.join(args.saved_model_path, 'superglue-lidar-rotation-invariant.pth.tar')
 
     config = {
         'superpoint': {
@@ -221,10 +221,10 @@ def main():
     for epoch in range(args.epochs):
         epoch = epoch + 1
         train(epoch, model, optimizer, train_data_loader, viz_train=viz_train)
-        print("Saved models in \'{}\'.".format(saved_model_file))
         torch.save(model.state_dict(), saved_model_file)
-        if epoch % 1 == 0:
-            validate(model, validate_data_loader, viz_validate=viz_validate)
+        print("Saved models in \'{}\'.".format(saved_model_file))
+        if epoch % 2 == 0:
+            validate(epoch, model, validate_data_loader, viz_validate=viz_validate)
 
 
     pass
@@ -313,7 +313,7 @@ def train(epoch, model, optimizer, data_loader, viz_train=None):
                     batch_loss += loss
 
                 # record training loss
-                if match_mask_ground_truth[:-1, :-1].sum() > 0:
+                if match_mask_ground_truth[:-1, :-1].sum() > 0 and (pred['matches0']>0).sum() > 0 and (pred['matches1']>0).sum()>0:
                     metrics = compute_metrics(pred['matches0'], pred['matches1'], match_mask_ground_truth)
                     accum_accuracy += float(metrics['matches0_acc'])
                     accum_recall += float(metrics['matches0_recall'])
@@ -370,13 +370,14 @@ def train(epoch, model, optimizer, data_loader, viz_train=None):
     torch.cuda.empty_cache()
 
 
-def validate(model, data_loader, viz_validate=None):
+def validate(epoch, model, data_loader, viz_validate=None):
     torch.set_grad_enabled(False)
-    iteration = 0
+    iteration = (epoch - 1) * len(data_loader)
     accum_accuracy = 0
     accum_recall = 0
     accum_precision = 0
     accum_true_pairs = 0
+    count_accumulate = 0
     device = torch.device("cuda" if args.use_gpu else "cpu")
     with tqdm(data_loader) as tq:
         for target, source, T_target_source in tq:
@@ -401,13 +402,14 @@ def validate(model, data_loader, viz_validate=None):
             # match_mask_ground_truth
             # matches = pred['matches0'][0].cpu().numpy()
             # confidence = pred['matching_scores0'][0].cpu().detach().numpy()
+            if match_mask_ground_truth[:-1, :-1].sum() > 0 and (pred['matches0']>0).sum() > 0 and (pred['matches1']>0).sum()>0:
+                metrics = compute_metrics(pred['matches0'], pred['matches1'], match_mask_ground_truth)
 
-            metrics = compute_metrics(pred['matches0'], pred['matches1'], match_mask_ground_truth)
-
-            accum_accuracy += float(metrics['matches0_acc'])
-            accum_recall += float(metrics['matches0_recall'])
-            accum_precision += float(metrics['matches0_precision'])
-            accum_true_pairs += match_mask_ground_truth[:-1, :-1].sum()
+                accum_accuracy += float(metrics['matches0_acc'])
+                accum_recall += float(metrics['matches0_recall'])
+                accum_precision += float(metrics['matches0_precision'])
+                accum_true_pairs += match_mask_ground_truth[:-1, :-1].sum()
+                count_accumulate += 1
 
             if iteration % 50 == 0:
                 print("accuracy: {}".format(accum_accuracy / 50))
@@ -416,15 +418,15 @@ def validate(model, data_loader, viz_validate=None):
                 print("true pairs: {}".format(accum_true_pairs / 50))
 
                 if viz_validate is not None:
-                    viz_validate['viz'].scatter(X=np.array([[iteration, accum_precision / 50]]),
+                    viz_validate['viz'].scatter(X=np.array([[iteration, accum_precision / count_accumulate]]),
                                 name="validate-precision",
                                 win=viz_validate['validate_precision'],
                                 update="append")
-                    viz_validate['viz'].scatter(X=np.array([[iteration, accum_recall / 50]]),
+                    viz_validate['viz'].scatter(X=np.array([[iteration, accum_recall / count_accumulate]]),
                                 name="validate-recall",
                                 win=viz_validate['validate_recall'],
                                 update="append")
-                    viz_validate['viz'].scatter(X=np.array([[iteration, accum_true_pairs / 50]]),
+                    viz_validate['viz'].scatter(X=np.array([[iteration, accum_true_pairs / count_accumulate]]),
                                              name="validate-true-pairs",
                                              win=viz_validate['validate_true_pairs'],
                                              update="append")
@@ -434,6 +436,7 @@ def validate(model, data_loader, viz_validate=None):
                 accum_recall = 0
                 accum_precision = 0
                 accum_true_pairs = 0
+                count_accumulate = 0
 
             del target, source
     torch.cuda.empty_cache()

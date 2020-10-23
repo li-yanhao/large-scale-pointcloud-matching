@@ -9,6 +9,7 @@ from torch.utils.data import Dataset
 
 from model.Birdview.dataset import make_images_info
 from scipy.spatial.transform import Rotation as R
+import torchvision.transforms.functional as TF
 
 
 def pts_from_pixel_to_meter(pts_in_pixels, meters_per_pixel):
@@ -21,27 +22,40 @@ def pts_from_meter_to_pixel(pts_in_meters, meters_per_pixel):
     return pts_in_pixels
 
 
-def input_transforms(meters_per_pixel):
-    return transforms.Compose([
-        transforms.Resize(size=(int(100/meters_per_pixel), int(100/meters_per_pixel))),
-        # transforms.RandomResizedCrop(size=(600, 960), scale=(0.8, 1.0), ratio=(0.75, 1.3333333333333333), interpolation=2),
-        # transforms.RandomRotation(degrees=360),
-        # transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
-        transforms.ToTensor(),
-        # transforms.RandomErasing(p=0.3, scale=(0.02, 0.33), ratio=(0.3, 3.3)),
-        # transforms.Normalize(mean=[0.485, 0.456, 0.406],
-        #                      std=[0.229, 0.224, 0.225]),
-    ])
+class MyRotation:
+    """Rotate by one of the given angles."""
+    def __init__(self, angle):
+        self.angle = angle
+
+    def __call__(self, x):
+        return TF.rotate(x, self.angle)
+
+
+def input_transforms(meters_per_pixel, rot_degree=None):
+    if rot_degree is None:
+        return transforms.Compose([
+            transforms.Resize(size=(int(100 / meters_per_pixel), int(100 / meters_per_pixel))),
+            # transforms.RandomRotation(degrees=360),
+            transforms.ToTensor(),
+        ])
+    else:
+        return transforms.Compose([
+            transforms.Resize(size=(int(100/meters_per_pixel), int(100/meters_per_pixel))),
+            # transforms.RandomRotation(degrees=360),
+            MyRotation(rot_degree),
+            transforms.ToTensor(),
+        ])
 
 
 
 class SuperglueDataset(Dataset):
-    def __init__(self, images_info, images_dir, positive_search_radius=8, meters_per_pixel=0.25):
+    def __init__(self, images_info, images_dir, positive_search_radius=8, meters_per_pixel=0.25, add_rotation=False):
         super(SuperglueDataset, self).__init__()
-        self.input_transforms = input_transforms(meters_per_pixel)
+        self.meters_per_pixel = meters_per_pixel
         self.images_info = images_info
         self.images_dir = images_dir
         self.meters_per_pixel = meters_per_pixel
+        self.add_rotation = add_rotation
 
         self.for_database = False
 
@@ -96,12 +110,21 @@ class SuperglueDataset(Dataset):
         pos_indices = self.list_of_positives_indices[index]
         pos_index = np.random.choice(pos_indices, 1, replace=True)[0]
         positive = Image.open(os.path.join(self.images_dir, self.images_info[pos_index]['image_file']))
-        if self.input_transforms:
-            query = self.input_transforms(query)
-            positive = self.input_transforms(positive)
+
+        theta_in_deg = np.random.rand() * 360 if self.add_rotation else 0
+        query = input_transforms(self.meters_per_pixel)(query)
+        positive = input_transforms(self.meters_per_pixel, theta_in_deg)(positive)
+
+        def T_rot_wrt_z(theta):
+            return np.array([[np.cos(theta), np.sin(theta), 0, 0],
+                             [-np.sin(theta), np.cos(theta), 0, 0],
+                             [0,0,1,0],
+                             [0,0,0,1]])
+
+        # TODO: change T_query_positive
         T_w_query = self._make_se3(self.images_info[index]['position'], self.images_info[index]['orientation'])
         T_w_positive = self._make_se3(self.images_info[pos_index]['position'], self.images_info[pos_index]['orientation'])
-        T_query_positive = np.linalg.inv(T_w_query) @ T_w_positive
+        T_query_positive = np.linalg.inv(T_w_query) @ T_w_positive @ T_rot_wrt_z(theta_in_deg / 180 * np.pi)
 
         # convert translation in pixels
         # T_query_positive[:3,3] = T_query_positive[:3,3] / self.meters_per_pixel

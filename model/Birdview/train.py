@@ -29,7 +29,7 @@ parser.add_argument('--mode', type=str, default='train', help='Mode', choices=['
 parser.add_argument('--batch_size', type=int, default=2, help='batch_size')
 parser.add_argument('--dataset_dir', type=str, default='/media/admini/lavie/dataset/birdview_dataset/', help='dataset_dir')
 parser.add_argument('--sequence_train', type=str, default='00', help='sequence_train')
-parser.add_argument('--sequence_validate', type=str, default='05', help='sequence_validate')
+parser.add_argument('--sequence_validate', type=str, default='juxin_1129-10', help='sequence_validate')
 
 # parser.add_argument('--dataset_dir', type=str, default='/home/li/Documents/wayz/image_data/dataset', help='dataset_dir')
 parser.add_argument('--num_workers', type=int, default=1, help='num_workers')
@@ -39,7 +39,7 @@ parser.add_argument('--num_similar_neg', type=int, default=4, help='number of si
 parser.add_argument('--margin', type=float, default=1.0, help='margin')
 parser.add_argument('--use_gpu', type=bool, default=True, help='use_gpu')
 parser.add_argument('--learning_rate', type=float, default=0.0001, help='learning_rate')
-parser.add_argument('--positive_search_radius', type=float, default=10, help='positive_search_radius')
+parser.add_argument('--positive_search_radius', type=float, default=4, help='positive_search_radius')
 parser.add_argument('--negative_filter_radius', type=float, default=50, help='negative_filter_radius')
 parser.add_argument('--saved_model_path', type=str,
                     default='/media/admini/lavie/dataset/birdview_dataset/saved_models', help='saved_model_path')
@@ -94,13 +94,13 @@ def main():
 
     train_database_images_info, train_query_images_info = train_test_split(images_info_train, test_size=0.1, random_state=42)
 
-    validate_database_images_info, validate_query_images_info = train_test_split(images_info_validate, test_size=0.2, random_state=20)
-    train_dataset = NetVladDataset(images_info=train_database_images_info, images_dir=train_images_dir,
-                                   num_similar_negatives=args.num_similar_neg,
-                                   positive_search_radius=args.positive_search_radius,
-                                   negative_filter_radius=args.negative_filter_radius)
-    train_data_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-                                   num_workers=args.num_workers)
+    validate_database_images_info, validate_query_images_info = train_test_split(images_info_validate, test_size=0.4, random_state=20)
+    # train_dataset = NetVladDataset(images_info=train_database_images_info, images_dir=train_images_dir,
+    #                                num_similar_negatives=args.num_similar_neg,
+    #                                positive_search_radius=args.positive_search_radius,
+    #                                negative_filter_radius=args.negative_filter_radius)
+    # train_data_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
+    #                                num_workers=args.num_workers)
 
     encoder = resnet18(pretrained=args.pretrained_embedding)
     base_model = nn.Sequential(
@@ -154,7 +154,7 @@ def main():
         if epoch % 1 == 0:
             validate(model, validate_database_images_info, validate_query_images_info, validate_images_dir, writer=None)
             validate(model, train_database_images_info, train_query_images_info, train_images_dir, writer=None)
-        train(epoch, model, optimizer, train_data_loader, writer=None)
+        # train(epoch, model, optimizer, train_data_loader, writer=None)
         torch.save(model.state_dict(), saved_model_file)
         print("Saved models in \'{}\'.".format(saved_model_file))
 

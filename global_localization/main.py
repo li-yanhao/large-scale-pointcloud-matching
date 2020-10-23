@@ -11,6 +11,9 @@ from sklearn.model_selection import train_test_split
 from matplotlib import pyplot as plt
 import argparse
 from model.Superglue.dataset import pts_from_meter_to_pixel, pts_from_pixel_to_meter
+from model.Superglue.dataset import input_transforms as superglue_input_transforms
+import torchvision.transforms.functional as TF
+# import model.Superglue.dataset
 
 
 # 1. create database
@@ -22,8 +25,10 @@ parser.add_argument('--mode', type=str, default='train', help='Mode', choices=['
 # parser.add_argument('--batch_size', type=int, default=2, help='batch_size')
 parser.add_argument('--dataset_dir', type=str, default='/media/admini/lavie/dataset/birdview_dataset/', help='dataset_dir')
 # parser.add_argument('--dataset_dir', type=str, default='/media/li/LENOVO/dataset/kitti/lidar_odometry/birdview_dataset', help='dataset_dir')
-parser.add_argument('--sequence', type=str, default='00', help='sequence')
-
+parser.add_argument('--sequence', type=str, default='00', help='sequence_all')
+parser.add_argument('--sequence_database', type=str, default='juxin_1023_map', help='sequence_database')
+parser.add_argument('--sequence_query', type=str, default='juxin_1023_locate', help='sequence_query')
+parser.add_argument('--use_different_sequence', type=bool, default=True, help='use_different_sequence')
 # parser.add_argument('--dataset_dir', type=str, default='/home/li/Documents/wayz/image_data/dataset', help='dataset_dir')
 parser.add_argument('--num_workers', type=int, default=1, help='num_workers')
 # parser.add_argument('--from_scratch', type=bool, default=True, help='from_scratch')
@@ -36,7 +41,7 @@ parser.add_argument('--saved_model_path', type=str,
 parser.add_argument('--epochs', type=int, default=120, help='epochs')
 parser.add_argument('--num_clusters', type=int, default=64, help='num_clusters')
 parser.add_argument('--final_dim', type=int, default=256, help='final_dim')
-parser.add_argument('--meters_per_pixel', type=float, default=0.25, help='meters_per_pixel')
+parser.add_argument('--meters_per_pixel', type=float, default=0.20, help='meters_per_pixel')
 args = parser.parse_args()
 
 
@@ -235,13 +240,24 @@ def pipeline_test():
     model.load_state_dict(model_checkpoint)
     print("Loaded bevnet checkpoints from \'{}\'.".format(saved_model_file_bevnet))
 
-    images_dir = os.path.join(args.dataset_dir, args.sequence)
+    # images_dir = os.path.join(args.dataset_dir, args.sequence)
+    database_images_dir = os.path.join(args.dataset_dir, args.sequence)
+    query_images_dir = os.path.join(args.dataset_dir, args.sequence)
     images_info_validate = make_images_info(
         struct_filename=os.path.join(args.dataset_dir, 'struct_file_' + args.sequence + '.txt'))
     database_images_info, query_images_info = train_test_split(images_info_validate, test_size=0.2,
                                                                random_state=10)
+
+    if args.use_different_sequence:
+        database_images_info = make_images_info(
+            struct_filename=os.path.join(args.dataset_dir, 'struct_file_' + args.sequence_database + '.txt'))
+        query_images_info = make_images_info(
+            struct_filename=os.path.join(args.dataset_dir, 'struct_file_' + args.sequence_query + '.txt'))
+        database_images_dir = os.path.join(args.dataset_dir, args.sequence_database)
+        query_images_dir = os.path.join(args.dataset_dir, args.sequence_query)
+
     image_database = ImageDatabase(images_info=database_images_info,
-                                   images_dir=images_dir, model=model,
+                                   images_dir=database_images_dir, model=model,
                                    generate_database=True,
                                    transforms=input_transforms())
 
@@ -260,34 +276,31 @@ def pipeline_test():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     matching = Matching(config).eval().to(device)
 
-
-    saved_model_file_superglue = os.path.join(args.saved_model_path, 'superglue-lidar-birdview.pth.tar')
+    saved_model_file_superglue = os.path.join(args.saved_model_path, 'superglue-lidar-rotation-invariant.pth.tar')
     model_checkpoint = torch.load(saved_model_file_superglue, map_location=lambda storage, loc: storage)
     matching.load_state_dict(model_checkpoint)
     print("Loaded superglue checkpoints from \'{}\'.".format(saved_model_file_superglue))
 
     translation_errors = []
+    rotation_errors = []
     true_count = 0
     for query_image_info in tqdm(query_images_info):
         query_results = image_database.query_image(
-            image_filename=os.path.join(images_dir, query_image_info['image_file']), num_results=3)
+            image_filename=os.path.join(query_images_dir, query_image_info['image_file']), num_results=2)
         # print('query_result: \n{}'.format(query_results))
         best_score = -1
         T_w_source_best = None
-        min_inliers = 30
+        min_inliers = 20
+        max_inliers = 30
         resolution = int(100 / args.meters_per_pixel)
         for query_result in query_results:
-            target_image = Image.open(os.path.join(images_dir, query_result['image_file']))
-            source_image = Image.open(os.path.join(images_dir, query_image_info['image_file']))
-
+            target_image = Image.open(os.path.join(database_images_dir, query_result['image_file']))
+            source_image = Image.open(os.path.join(query_images_dir, query_image_info['image_file']))
             target_kpts, source_kpts = superglue_match(target_image, source_image, resolution, matching)
             target_kpts_in_meters = pts_from_pixel_to_meter(target_kpts, args.meters_per_pixel)
             source_kpts_in_meters = pts_from_pixel_to_meter(source_kpts, args.meters_per_pixel)
-
-            # target_kpts_in_meters = (target_kpts - resolution / 2) * meters_per_pixel
-            # source_kpts_in_meters = (source_kpts - resolution / 2) * meters_per_pixel
-            # T_target_source, score = compute_relative_pose_with_ransac(target_kpts_in_meters, source_kpts_in_meters)
-            T_target_source, score = compute_relative_pose(target_kpts_in_meters, source_kpts_in_meters), len(target_kpts)
+            T_target_source, score = compute_relative_pose_with_ransac(target_kpts_in_meters, source_kpts_in_meters)
+            # T_target_source, score = compute_relative_pose(target_kpts_in_meters, source_kpts_in_meters), len(target_kpts)
             if score is None:
                 continue
             if score > best_score and score > min_inliers:
@@ -306,22 +319,59 @@ def pipeline_test():
                 T_w_target = np.vstack([T_w_target, np.array([0,0,0,1])])
                 T_w_source_best = T_w_target @ T_target_source
             # print(T_target_source)
-            # T_target_source = compute_relative_pose(target_kpts, source_kpts)
-        # print(T_w_source_best)
+            INVERSE_AUGMENTATION = True
+            if INVERSE_AUGMENTATION:
+                # tf = superglue_input_transforms(args.meters_per_pixel, 180)
+                target_image_inv = TF.rotate(target_image, 180)
+                target_kpts_inv, source_kpts = superglue_match(target_image_inv, source_image, resolution, matching)
+                target_kpts_in_meters_inv = pts_from_pixel_to_meter(target_kpts_inv, args.meters_per_pixel)
+                source_kpts_in_meters = pts_from_pixel_to_meter(source_kpts, args.meters_per_pixel)
+                T_target_inv_source, score = compute_relative_pose_with_ransac(target_kpts_in_meters_inv, source_kpts_in_meters)
+                # T_target_inv_source, score = compute_relative_pose(target_kpts_in_meters_inv, source_kpts_in_meters), len(target_kpts)
+                if score is None:
+                    continue
+                if score > best_score and score > min_inliers:
+                    best_score = score
+                    T_target_source = np.array(
+                        [[-T_target_source[0, 0], -T_target_source[0, 1], 0, -T_target_source[0, 2]],
+                         [-T_target_source[1, 0], -T_target_source[1, 1], 0, -T_target_source[1, 2]],
+                         [0, 0, 1, 0],
+                         [0, 0, 0, 1]])
+                    # T_target_source = np.array(
+                    #     [[1, 0, 0, 0],
+                    #      [0, 1, 0, 0],
+                    #      [0, 0, 1, 0],
+                    #      [0, 0, 0, 1]])
+                    T_w_target = np.hstack([R.from_quat(query_result['orientation'][[1, 2, 3, 0]]).as_matrix(),
+                                            query_result['position'].reshape(3, 1)])
+                    T_w_target = np.vstack([T_w_target, np.array([0, 0, 0, 1])])
+                    T_w_source_best = T_w_target @ T_target_source
+            if best_score > max_inliers:
+                break
+
+
         if T_w_source_best is not None:
             T_w_source_gt = np.hstack([R.from_quat(query_image_info['orientation'][[1, 2, 3, 0]]).as_matrix(),
                                     query_image_info['position'].reshape(3, 1)])
             T_w_source_gt = np.vstack([T_w_source_gt, np.array([0, 0, 0, 1])])
             delta_T_w_source = np.linalg.inv(T_w_source_best) @  T_w_source_gt
             delta_translation = np.sqrt(delta_T_w_source[:3,3] @ delta_T_w_source[:3,3])
+            delta_degree = np.arccos(0.5 * (np.trace(delta_T_w_source[:3,:3]) - 1)) / np.pi * 180
             print('Translation error: {}'.format(delta_translation))
+            print('Rotation error: {}'.format(delta_degree))
             translation_errors.append(delta_translation)
+            rotation_errors.append(delta_degree)
         else:
             print('Global localization failed.')
+            pass
+            # translation_errors.append(float('nan'))
     translation_errors = np.array(translation_errors)
+    rotation_errors = np.array(rotation_errors)
     print('Mean translation error: {}'.format(translation_errors.mean()))
     for r in [0.1, 0.2, 0.3, 0.5, 0.8, 1.0, 2, 3, 4, 5, 6, 7, 8, 9, 10]:
-        print('Percentage under {} m: {}'.format(r, (translation_errors<r).sum() / len(translation_errors)))
+        print('Percentage of translation errors under {} m: {}'.format(r, (translation_errors<r).sum() / len(translation_errors)))
+    for theta in [1.0, 2, 3, 4, 5, 6, 7, 8, 9, 10]:
+        print('Percentage of rotation errors under {} degrees: {}'.format(theta, (rotation_errors<theta).sum() / len(rotation_errors)))
 
     plt.scatter(np.linspace(0, 50, num=len(translation_errors)), np.array(translation_errors))
     plt.show()

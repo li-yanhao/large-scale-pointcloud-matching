@@ -238,6 +238,7 @@ class ImageDatabase(object):
                 #     # 'orientation': xxx,
                 # })
                 encodings.append(netvlad_encoding)
+
         dim_encoding = len(encodings[0])
         encodings = np.array(encodings)
         self.index = faiss.IndexFlatL2(dim_encoding)
