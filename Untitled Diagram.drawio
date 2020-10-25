@@ -1,6 +1,6 @@
-<mxfile host="app.diagrams.net" modified="2020-10-24T12:51:45.353Z" agent="5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.90 Safari/537.36" etag="aW1Ku1WlQldHqcfi2uny" version="13.8.1" type="github">
+<mxfile host="app.diagrams.net" modified="2020-10-25T01:09:20.149Z" agent="5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.111 Safari/537.36" etag="li4aUhSNz04aX9oZtydX" version="13.1.1" type="github">
   <diagram id="2jxR7wYnu3-kFQa71FGk" name="Page-1">
-    <mxGraphModel dx="950" dy="532" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="1038" dy="580" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -82,7 +82,7 @@
         <mxCell id="3YiUoNPj6mN6G0VMzehb-28" value="soft-assignment" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;fontColor=none;" parent="1" vertex="1">
           <mxGeometry x="525" y="240" width="100" height="20" as="geometry" />
         </mxCell>
-        <mxCell id="982d-GAsrSOaF66j4D_5-3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="3YiUoNPj6mN6G0VMzehb-29">
+        <mxCell id="982d-GAsrSOaF66j4D_5-3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="3YiUoNPj6mN6G0VMzehb-29" edge="1">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="690" y="350" as="targetPoint" />
           </mxGeometry>
@@ -96,8 +96,8 @@
             <mxPoint x="470" y="295" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="3YiUoNPj6mN6G0VMzehb-31" value="L&#39;xL&#39;xD map mapped as &lt;br style=&quot;font-size: 10px&quot;&gt;NxD local descriptors &lt;b style=&quot;font-size: 10px&quot;&gt;x&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;fontColor=none;fontSize=10;" parent="1" vertex="1">
-          <mxGeometry x="445" y="352" width="120" height="30" as="geometry" />
+        <mxCell id="3YiUoNPj6mN6G0VMzehb-31" value="L&#39;xL&#39;xD mapped as &lt;br style=&quot;font-size: 10px&quot;&gt;NxD local descriptors &lt;b style=&quot;font-size: 10px&quot;&gt;x&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;fontColor=none;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="435" y="352" width="140" height="30" as="geometry" />
         </mxCell>
         <mxCell id="3YiUoNPj6mN6G0VMzehb-36" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontColor=none;" parent="1" source="3YiUoNPj6mN6G0VMzehb-24" target="3YiUoNPj6mN6G0VMzehb-29" edge="1">
           <mxGeometry relative="1" as="geometry">
