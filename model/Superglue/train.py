@@ -23,11 +23,11 @@ parser.add_argument('--mode', type=str, default='train', help='Mode', choices=['
 parser.add_argument('--batch_size', type=int, default=6, help='batch_size')
 parser.add_argument('--dataset_dir', type=str, default='/media/admini/lavie/dataset/birdview_dataset/', help='dataset_dir')
 parser.add_argument('--sequence_train', type=str, default='00', help='sequence_train')
-parser.add_argument('--sequence_validate', type=str, default='05', help='sequence_validate')
+parser.add_argument('--sequence_validate', type=str, default='08', help='sequence_validate')
 parser.add_argument('--num_workers', type=int, default=1, help='num_workers')
 parser.add_argument('--use_gpu', type=bool, default=True, help='use_gpu')
 parser.add_argument('--learning_rate', type=float, default=0.0003, help='learning_rate')
-parser.add_argument('--positive_search_radius', type=float, default=8, help='positive_search_radius')
+parser.add_argument('--positive_search_radius', type=float, default=7, help='positive_search_radius')
 parser.add_argument('--saved_model_path', type=str,
                     default='/media/admini/lavie/dataset/birdview_dataset/saved_models', help='saved_model_path')
 parser.add_argument('--epochs', type=int, default=120, help='epochs')

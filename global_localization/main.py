@@ -291,7 +291,7 @@ def pipeline_test():
         best_score = -1
         T_w_source_best = None
         min_inliers = 20
-        max_inliers = 30
+        max_inliers = 40
         resolution = int(100 / args.meters_per_pixel)
         for query_result in query_results:
             target_image = Image.open(os.path.join(database_images_dir, query_result['image_file']))
