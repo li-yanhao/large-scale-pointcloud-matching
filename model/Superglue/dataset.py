@@ -49,13 +49,14 @@ def input_transforms(meters_per_pixel, rot_degree=None):
 
 
 class SuperglueDataset(Dataset):
-    def __init__(self, images_info, images_dir, positive_search_radius=8, meters_per_pixel=0.25, add_rotation=False):
+    def __init__(self, images_info, images_dir, positive_search_radius, meters_per_pixel, add_rotation=False, return_filename=False):
         super(SuperglueDataset, self).__init__()
         self.meters_per_pixel = meters_per_pixel
         self.images_info = images_info
         self.images_dir = images_dir
         self.meters_per_pixel = meters_per_pixel
         self.add_rotation = add_rotation
+        self.return_filename = return_filename
 
         self.for_database = False
 
@@ -128,8 +129,12 @@ class SuperglueDataset(Dataset):
 
         # convert translation in pixels
         # T_query_positive[:3,3] = T_query_positive[:3,3] / self.meters_per_pixel
-
-        return query, positive, T_query_positive
+        if self.return_filename:
+            return query, positive, T_query_positive, \
+                   os.path.join(self.images_dir, self.images_info[index]['image_file']), \
+                   os.path.join(self.images_dir, self.images_info[pos_index]['image_file'])
+        else:
+            return query, positive, T_query_positive
 
 
 if __name__ == '__main__':

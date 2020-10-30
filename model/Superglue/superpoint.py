@@ -203,3 +203,15 @@ class SuperPoint(nn.Module):
             'scores': scores,
             'descriptors': descriptors,
         }
+
+
+if __name__ == '__main__':
+    device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
+    superpoint = SuperPoint({}).to(device)
+    target_frame_tensor = torch.rand(1, 1,400,400)
+    source_frame_tensor = torch.rand(1, 1,400,400)
+
+    from tqdm import tqdm
+    for i in tqdm(range(20000)):
+        input = torch.Tensor(target_frame_tensor).to(device)
+        pred = superpoint({'image': input})

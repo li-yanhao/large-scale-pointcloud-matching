@@ -40,16 +40,16 @@ class BaseModel(nn.Module):
             # nn.Flatten()
         )
 
-        self.fc_1 = nn.Sequential(
-            nn.Dropout(p=0.7),
-            nn.Linear(self.dim_3 * self.layer_3_out_width * self.layer_3_out_height, self.dim_4),
-        )
-
-        self.fc_2 = nn.Sequential(
-            nn.Dropout(p=0.7),
-            nn.Linear(self.dim_4, self.dim_out),
-            nn.Softmax(dim=1)
-        )
+        # self.fc_1 = nn.Sequential(
+        #     nn.Dropout(p=0.7),
+        #     nn.Linear(self.dim_3 * self.layer_3_out_width * self.layer_3_out_height, self.dim_4),
+        # )
+        #
+        # self.fc_2 = nn.Sequential(
+        #     nn.Dropout(p=0.7),
+        #     nn.Linear(self.dim_4, self.dim_out),
+        #     nn.Softmax(dim=1)
+        # )
 
     def forward(self, x):
         h = x / self.max_value

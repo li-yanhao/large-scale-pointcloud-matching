@@ -15,7 +15,7 @@ from tqdm import tqdm
 from model.Superglue.matching import Matching
 import torch.optim as optim
 import visdom
-import cv2
+# import cv2
 
 
 parser = argparse.ArgumentParser(description='SuperglueTrain')
@@ -27,10 +27,10 @@ parser.add_argument('--sequence_validate', type=str, default='08', help='sequenc
 parser.add_argument('--num_workers', type=int, default=1, help='num_workers')
 parser.add_argument('--use_gpu', type=bool, default=True, help='use_gpu')
 parser.add_argument('--learning_rate', type=float, default=0.0003, help='learning_rate')
-parser.add_argument('--positive_search_radius', type=float, default=7, help='positive_search_radius')
+parser.add_argument('--positive_search_radius', type=float, default=10, help='positive_search_radius')
 parser.add_argument('--saved_model_path', type=str,
                     default='/media/admini/lavie/dataset/birdview_dataset/saved_models', help='saved_model_path')
-parser.add_argument('--epochs', type=int, default=120, help='epochs')
+parser.add_argument('--epochs', type=int, default=100, help='epochs')
 parser.add_argument('--load_checkpoints', type=bool, default=True, help='load_checkpoints')
 parser.add_argument('--meters_per_pixel', type=float, default=0.25, help='meters_per_pixel')
 # parser.add_argument('--tolerance_in_pixels', type=float, default=4, help='tolerance_in_pixels')
@@ -220,11 +220,13 @@ def main():
 
     for epoch in range(args.epochs):
         epoch = epoch + 1
+        if epoch % 1 == 0:
+            validate(epoch, model, validate_data_loader, viz_validate=viz_validate)
+            # validate_sift(sift_matcher, validate_data_loader)
         train(epoch, model, optimizer, train_data_loader, viz_train=viz_train)
         torch.save(model.state_dict(), saved_model_file)
         print("Saved models in \'{}\'.".format(saved_model_file))
-        if epoch % 2 == 0:
-            validate(epoch, model, validate_data_loader, viz_validate=viz_validate)
+
 
 
     pass
@@ -378,6 +380,14 @@ def validate(epoch, model, data_loader, viz_validate=None):
     accum_precision = 0
     accum_true_pairs = 0
     count_accumulate = 0
+
+    overall_detection = 0
+    overall_recall = 0
+    overall_precision = 0
+    overall_true_pairs = 0
+    overall_count = 0
+
+
     device = torch.device("cuda" if args.use_gpu else "cpu")
     with tqdm(data_loader) as tq:
         for target, source, T_target_source in tq:
@@ -387,6 +397,8 @@ def validate(epoch, model, data_loader, viz_validate=None):
             target = target.to(device)
             source = source.to(device)
             pred = model({'image0': target, 'image1': source})
+
+            # comment for computation cose evaluation
             target_kpts = pred['keypoints0'][0].cpu()
             source_kpts = pred['keypoints1'][0].cpu()
             if len(target_kpts) == 0 or len(source_kpts) == 0:
@@ -410,6 +422,12 @@ def validate(epoch, model, data_loader, viz_validate=None):
                 accum_precision += float(metrics['matches0_precision'])
                 accum_true_pairs += match_mask_ground_truth[:-1, :-1].sum()
                 count_accumulate += 1
+
+                overall_recall += float(metrics['matches0_recall'])
+                overall_precision += float(metrics['matches0_precision'])
+                overall_true_pairs += match_mask_ground_truth[:-1, :-1].sum()
+                overall_detection += (len(target_kpts) + len(source_kpts)) / 2
+                overall_count += 1
 
             if iteration % 50 == 0:
                 print("accuracy: {}".format(accum_accuracy / 50))
@@ -441,6 +459,67 @@ def validate(epoch, model, data_loader, viz_validate=None):
             del target, source
     torch.cuda.empty_cache()
     torch.set_grad_enabled(True)
+
+    print("average recall: {}".format(overall_recall / overall_count))
+    print("average precision: {}".format(overall_precision / overall_count))
+    print("average true pairs: {}".format(overall_true_pairs / overall_count))
+    print("average detected points: {}".format(overall_detection / overall_count))
+
+
+
+def validate_sift(sift, data_loader):
+    accum_accuracy = 0
+    accum_recall = 0
+    accum_precision = 0
+    accum_true_pairs = 0
+    count_accumulate = 0
+
+    overall_recall = 0
+    overall_precision = 0
+    overall_true_pairs = 0
+    overall_count = 0
+
+    device = torch.device("cuda" if args.use_gpu else "cpu")
+    with tqdm(data_loader) as tq:
+        for target, source, T_target_source in tq:
+            assert (target.shape == source.shape)
+            B, C, W, H = target.shape
+            assert (B == 1 and C == 1)
+            target = target.squeeze()
+            source = source.squeeze()
+
+            target_kpts = sift.detect(target, None)
+            source_kpts = sift.detect(source, None)
+
+            if len(target_kpts) == 0 or len(source_kpts) == 0:
+                continue
+            #
+            # # in superglue/numpy/tensor the coordinates are (i,j) which correspond to (v,u) in PIL Image/opencv
+            # target_kpts_in_meters = pts_from_pixel_to_meter(target_kpts, args.meters_per_pixel)
+            # source_kpts_in_meters = pts_from_pixel_to_meter(source_kpts, args.meters_per_pixel)
+            # match_mask_ground_truth = make_ground_truth_matrix(target_kpts_in_meters, source_kpts_in_meters,
+            #                                                    T_target_source[0],
+            #                                                    args.tolerance_in_meters)
+            # # print(match_mask_ground_truth[:-1,:-1].sum())
+            #
+            # # match_mask_ground_truth
+            # # matches = pred['matches0'][0].cpu().numpy()
+            # # confidence = pred['matching_scores0'][0].cpu().detach().numpy()
+            # if match_mask_ground_truth[:-1, :-1].sum() > 0 and (pred['matches0'] > 0).sum() > 0 and (
+            #         pred['matches1'] > 0).sum() > 0:
+            #     metrics = compute_metrics(pred['matches0'], pred['matches1'], match_mask_ground_truth)
+            #
+            #     accum_accuracy += float(metrics['matches0_acc'])
+            #     accum_recall += float(metrics['matches0_recall'])
+            #     accum_precision += float(metrics['matches0_precision'])
+            #     accum_true_pairs += match_mask_ground_truth[:-1, :-1].sum()
+            #     count_accumulate += 1
+            #
+            #     overall_recall += float(metrics['matches0_recall'])
+            #     overall_precision += float(metrics['matches0_precision'])
+            #     overall_true_pairs += match_mask_ground_truth[:-1, :-1].sum()
+            #     overall_count += 1
+    pass
 
 
 if __name__ == '__main__':

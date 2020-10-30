@@ -25,9 +25,9 @@ parser.add_argument('--mode', type=str, default='train', help='Mode', choices=['
 # parser.add_argument('--batch_size', type=int, default=2, help='batch_size')
 parser.add_argument('--dataset_dir', type=str, default='/media/admini/lavie/dataset/birdview_dataset/', help='dataset_dir')
 # parser.add_argument('--dataset_dir', type=str, default='/media/li/LENOVO/dataset/kitti/lidar_odometry/birdview_dataset', help='dataset_dir')
-parser.add_argument('--sequence', type=str, default='00', help='sequence_all')
-parser.add_argument('--sequence_database', type=str, default='juxin_1023_map', help='sequence_database')
-parser.add_argument('--sequence_query', type=str, default='juxin_1023_locate', help='sequence_query')
+parser.add_argument('--sequence', type=str, default='juxin_1023_locate', help='sequence_all')
+parser.add_argument('--sequence_database', type=str, default='juxin_0617', help='sequence_database')
+parser.add_argument('--sequence_query', type=str, default='juxin_0619', help='sequence_query')
 parser.add_argument('--use_different_sequence', type=bool, default=True, help='use_different_sequence')
 # parser.add_argument('--dataset_dir', type=str, default='/home/li/Documents/wayz/image_data/dataset', help='dataset_dir')
 parser.add_argument('--num_workers', type=int, default=1, help='num_workers')
@@ -42,11 +42,10 @@ parser.add_argument('--epochs', type=int, default=120, help='epochs')
 parser.add_argument('--num_clusters', type=int, default=64, help='num_clusters')
 parser.add_argument('--final_dim', type=int, default=256, help='final_dim')
 parser.add_argument('--meters_per_pixel', type=float, default=0.20, help='meters_per_pixel')
+parser.add_argument('--top_k', type=int, default=3, help='top_k')
 args = parser.parse_args()
 
 
-# TODO
-# def visualize_netvlad(model, database_images_info, query_images_info, images_dir):
 def visualize_netvlad():
     base_model = BaseModel(300, 300)
     dim = 256
@@ -235,7 +234,7 @@ def pipeline_test():
     net_vlad = NetVLAD(num_clusters=args.num_clusters, dim=256, alpha=1.0, outdim=args.final_dim)
     model = EmbedNet(base_model, net_vlad)
 
-    saved_model_file_bevnet = os.path.join(args.saved_model_path, 'model-lazy-triplet.pth.tar')
+    saved_model_file_bevnet = os.path.join(args.saved_model_path, 'model-to-check-top1.pth.tar')
     model_checkpoint = torch.load(saved_model_file_bevnet, map_location=lambda storage, loc: storage)
     model.load_state_dict(model_checkpoint)
     print("Loaded bevnet checkpoints from \'{}\'.".format(saved_model_file_bevnet))
@@ -243,10 +242,10 @@ def pipeline_test():
     # images_dir = os.path.join(args.dataset_dir, args.sequence)
     database_images_dir = os.path.join(args.dataset_dir, args.sequence)
     query_images_dir = os.path.join(args.dataset_dir, args.sequence)
-    images_info_validate = make_images_info(
+    database_images_info = query_images_info = make_images_info(
         struct_filename=os.path.join(args.dataset_dir, 'struct_file_' + args.sequence + '.txt'))
-    database_images_info, query_images_info = train_test_split(images_info_validate, test_size=0.2,
-                                                               random_state=10)
+    # database_images_info, query_images_info = train_test_split(images_info_validate, test_size=0.2,
+    #                                                            random_state=10)
 
     if args.use_different_sequence:
         database_images_info = make_images_info(
@@ -283,15 +282,27 @@ def pipeline_test():
 
     translation_errors = []
     rotation_errors = []
+
+    success_records = []
+    accumulated_distance = 0
+    last_T_w_source_gt = None
+
     true_count = 0
     for query_image_info in tqdm(query_images_info):
         query_results = image_database.query_image(
-            image_filename=os.path.join(query_images_dir, query_image_info['image_file']), num_results=2)
+            image_filename=os.path.join(query_images_dir, query_image_info['image_file']), num_results=args.top_k+1)
+        if args.use_different_sequence:
+            # avoid the same image from database
+            query_results = query_results[:args.top_k]
+        else:
+            query_results = query_results[1:args.top_k+1]
         # print('query_result: \n{}'.format(query_results))
         best_score = -1
         T_w_source_best = None
         min_inliers = 20
-        max_inliers = 40
+        max_inliers = 30
+        # min_inliers = 0
+        # max_inliers = 0
         resolution = int(100 / args.meters_per_pixel)
         for query_result in query_results:
             target_image = Image.open(os.path.join(database_images_dir, query_result['image_file']))
@@ -349,22 +360,34 @@ def pipeline_test():
             if best_score > max_inliers:
                 break
 
+        # ground truch pose
+        T_w_source_gt = np.hstack([R.from_quat(query_image_info['orientation'][[1, 2, 3, 0]]).as_matrix(),
+                                   query_image_info['position'].reshape(3, 1)])
+        T_w_source_gt = np.vstack([T_w_source_gt, np.array([0, 0, 0, 1])])
+
+        # record travelled distance
+        if last_T_w_source_gt is not None:
+            T_last_current = np.linalg.inv(last_T_w_source_gt) @ T_w_source_gt
+            accumulated_distance += np.sqrt(T_last_current[:3,3] @ T_last_current[:3,3])
+        last_T_w_source_gt = T_w_source_gt
 
         if T_w_source_best is not None:
-            T_w_source_gt = np.hstack([R.from_quat(query_image_info['orientation'][[1, 2, 3, 0]]).as_matrix(),
-                                    query_image_info['position'].reshape(3, 1)])
-            T_w_source_gt = np.vstack([T_w_source_gt, np.array([0, 0, 0, 1])])
+
             delta_T_w_source = np.linalg.inv(T_w_source_best) @  T_w_source_gt
             delta_translation = np.sqrt(delta_T_w_source[:3,3] @ delta_T_w_source[:3,3])
-            delta_degree = np.arccos(0.5 * (np.trace(delta_T_w_source[:3,:3]) - 1)) / np.pi * 180
+            delta_degree = np.arccos(min(1, 0.5 * (np.trace(delta_T_w_source[:3,:3]) - 1))) / np.pi * 180
             print('Translation error: {}'.format(delta_translation))
             print('Rotation error: {}'.format(delta_degree))
             translation_errors.append(delta_translation)
             rotation_errors.append(delta_degree)
+            success_records.append((accumulated_distance, True))
         else:
             print('Global localization failed.')
+            success_records.append((accumulated_distance, False))
             pass
             # translation_errors.append(float('nan'))
+        print('accumulated_distance', accumulated_distance)
+
     translation_errors = np.array(translation_errors)
     rotation_errors = np.array(rotation_errors)
     print('Mean translation error: {}'.format(translation_errors.mean()))
@@ -376,7 +399,43 @@ def pipeline_test():
     plt.scatter(np.linspace(0, 50, num=len(translation_errors)), np.array(translation_errors))
     plt.show()
 
+    travelled_distances = [0.2, 0.4, 0.6, 0.8, 1.0, 1.5, 2, 3, 4, 5, 6, 8, 10, 15, 20, 25, 30, 35, 40, 45, 50]
+    probabilities = []
+    for thres_distance in travelled_distances:
+        probabilities.append(localization_probability(accumulated_distance, np.array(success_records), thres_distance))
+    plt.plot(travelled_distances, probabilities, lw=1)
+    # plt.plot([0, 1], [0, 1], '--', color=(0.6, 0.6, 0.6), label="Luck")
+    plt.xlabel("travelled distance")
+    plt.ylabel("probabilities")
+    plt.show()
+
+    translation_errors = translation_errors[~np.isnan(translation_errors)]
+    rotation_errors = rotation_errors[~np.isnan(rotation_errors)]
+
+    trans_err_avg = translation_errors.mean()
+    trans_err_std = translation_errors - trans_err_avg
+    trans_err_std = np.sqrt((trans_err_std * trans_err_std).mean())
+    print("average translation error: {}".format(trans_err_avg))
+    print("standard deviation of translation error: {}".format(trans_err_std))
+
+    rotation_err_avg = rotation_errors.mean()
+    rotation_err_std = rotation_errors - rotation_err_avg
+    rotation_err_std = np.sqrt((rotation_err_std * rotation_err_std).mean())
+    print("average rotation_errors error: {}".format(rotation_err_avg))
+    print("standard deviation of rotation_errors error: {}".format(rotation_err_std))
+
+    print("recall: {}".format(len(translation_errors) / len(query_images_info)))
+
+
     pass
+
+
+def localization_probability(total_distance, localization_results, thres_distance):
+    num_intervals = int(total_distance / thres_distance) + 1
+    success = np.zeros(num_intervals)
+    for result in localization_results:
+        success[int(result[0] / thres_distance)] = 1
+    return 1 - success.mean()
 
 
 if __name__ == '__main__':

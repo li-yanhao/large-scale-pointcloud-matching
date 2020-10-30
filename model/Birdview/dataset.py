@@ -67,36 +67,19 @@ def make_images_info(struct_filename=None, images_dir=None):
 
 class NetVladDataset(Dataset):
     def __init__(self, images_info, images_dir, transforms=input_transforms(), positive_search_radius=0.5,
-                 negative_filter_radius=2.0, num_similar_negatives=8, max_angle_diff_in_degree=90):
+                 negative_filter_radius=2.0, num_similar_negatives=8, max_angle_diff_in_degree=90, print_query_info=False):
         super(NetVladDataset, self).__init__()
         self.input_transforms = transforms
         self.images_info = images_info
         self.images_dir = images_dir
-
         self.for_database = False
-
-        # with open(os.path.join(dataset_dir, "image_struct.txt"), "r") as struct_file:
-        #     # skip the first line
-        #     struct_file.readline()
-        #     while True:
-        #         line = struct_file.readline()
-        #         if not line:
-        #             break
-        #         splitted = [i for i in line.split(",")]
-        #         self.images_info.append({
-        #             'image_file': splitted[0],
-        #             'timestamp': float(splitted[1]),
-        #             'position': np.array([float(splitted[2]), float(splitted[3]), float(splitted[4])]),
-        #             'orientation': np.array(
-        #                 [float(splitted[5]), float(splitted[6]), float(splitted[7]), float(splitted[8])])
-        #         })
         self.images_info = np.array(self.images_info)
-        self._generate_train_dataset(positive_search_radius, negative_filter_radius, num_similar_negatives,
-                                     max_angle_diff_in_degree)
+        self.print_query_info = print_query_info
+
+        self._generate_train_dataset(positive_search_radius, negative_filter_radius, num_similar_negatives)
 
     # TODO: Determine (query, positive, negative) indices before feeding data
-    def _generate_train_dataset(self, positive_search_radius, negative_filter_radius, num_similar_negatives,
-                                max_angle_diff_in_degree):
+    def _generate_train_dataset(self, positive_search_radius, negative_filter_radius, num_similar_negatives):
         knn = NearestNeighbors()
         image_positions = np.array([image_info['position'] for image_info in self.images_info])
         knn.fit(image_positions)
@@ -127,6 +110,7 @@ class NetVladDataset(Dataset):
         # print(self.list_of_positives_indices)
 
         self.list_of_negative_indices = []
+        self.list_of_unrelated_indices = []
         for i in range(len(self.images_info)):
             _, non_negative_indices = knn.radius_neighbors(image_positions[i].reshape(1, -1),
                                                            radius=negative_filter_radius)
@@ -144,6 +128,12 @@ class NetVladDataset(Dataset):
             merged_negative_indices = np.concatenate([similar_negative_indices, random_negative_indices])
             self.list_of_negative_indices.append(merged_negative_indices)
 
+            unrelated_indices = np.random.choice(non_negative_indices, 30, replace=True)
+            self.list_of_unrelated_indices.append(unrelated_indices)
+
+
+
+
     def __len__(self):
         return len(self.images_info)
 
@@ -158,11 +148,22 @@ class NetVladDataset(Dataset):
         for neg_index in self.list_of_negative_indices[index]:
             negatives.append(Image.open(os.path.join(self.images_dir, self.images_info[neg_index]['image_file'])))
 
+        unrelated_index = np.random.choice(self.list_of_unrelated_indices[index], 1)[0]
+        unrelated = Image.open(os.path.join(self.images_dir, self.images_info[unrelated_index]['image_file']))
+
+
         if self.input_transforms:
             query = self.input_transforms(query)
             negatives = torch.cat([self.input_transforms(img).unsqueeze(0) for img in negatives])
             positives = torch.cat([self.input_transforms(img).unsqueeze(0) for img in positives])
-        return query, positives, negatives
+            unrelated = self.input_transforms(unrelated)
+        if self.print_query_info:
+            return query, positives, negatives, self.images_info[index]
+
+
+        return query, positives, negatives, unrelated
+
+
 
 
 class ValidationDataset(Dataset):
@@ -184,22 +185,20 @@ class ValidationDataset(Dataset):
 
 
 class PureDataset(Dataset):
-    def __init__(self, dataset_dir: str, transforms=input_transforms()):
+    def __init__(self, images_info, images_dir, transforms=input_transforms()):
         super(PureDataset, self).__init__()
         self.input_transforms = transforms
-        # self.images_info = []
-        self.dataset_dir = dataset_dir
-        self.images_dir = os.path.join(dataset_dir, 'images')
-        self.images = []
+        self.images_info = images_info
+        self.images_dir = images_dir
+        self.images_info = np.array(self.images_info)
 
     def __len__(self):
-        return len(self.images)
+        return len(self.images_info)
 
     def __getitem__(self, index):
         query = Image.open(os.path.join(self.images_dir, self.images_info[index]['image_file']))
-        if self.input_transforms:
-            query = self.input_transforms(query)
-        return query
+        query = self.input_transforms(query)
+        return query, self.images_info[index]
 
 
 # for image retrieval

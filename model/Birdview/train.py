@@ -28,18 +28,18 @@ parser = argparse.ArgumentParser(description='WayzNetVlad')
 parser.add_argument('--mode', type=str, default='train', help='Mode', choices=['train', 'test'])
 parser.add_argument('--batch_size', type=int, default=2, help='batch_size')
 parser.add_argument('--dataset_dir', type=str, default='/media/admini/lavie/dataset/birdview_dataset/', help='dataset_dir')
-parser.add_argument('--sequence_train', type=str, default='00', help='sequence_train')
-parser.add_argument('--sequence_validate', type=str, default='juxin_1129-10', help='sequence_validate')
+parser.add_argument('--sequence_train', type=str, default='juxin_1023_map', help='sequence_train')
+parser.add_argument('--sequence_validate', type=str, default='juxin_1023_locate', help='sequence_validate')
 
 # parser.add_argument('--dataset_dir', type=str, default='/home/li/Documents/wayz/image_data/dataset', help='dataset_dir')
 parser.add_argument('--num_workers', type=int, default=1, help='num_workers')
 # parser.add_argument('--from_scratch', type=bool, default=True, help='from_scratch')
 parser.add_argument('--pretrained_embedding', type=bool, default=False, help='pretrained_embedding')
 parser.add_argument('--num_similar_neg', type=int, default=4, help='number of similar negative samples')
-parser.add_argument('--margin', type=float, default=1.0, help='margin')
+parser.add_argument('--margin', type=float, default=0.8, help='margin')
 parser.add_argument('--use_gpu', type=bool, default=True, help='use_gpu')
-parser.add_argument('--learning_rate', type=float, default=0.0001, help='learning_rate')
-parser.add_argument('--positive_search_radius', type=float, default=4, help='positive_search_radius')
+parser.add_argument('--learning_rate', type=float, default=0.0005, help='learning_rate')
+parser.add_argument('--positive_search_radius', type=float, default=10, help='positive_search_radius')
 parser.add_argument('--negative_filter_radius', type=float, default=50, help='negative_filter_radius')
 parser.add_argument('--saved_model_path', type=str,
                     default='/media/admini/lavie/dataset/birdview_dataset/saved_models', help='saved_model_path')
@@ -47,40 +47,9 @@ parser.add_argument('--epochs', type=int, default=120, help='epochs')
 parser.add_argument('--load_checkpoints', type=bool, default=True, help='load_checkpoints')
 parser.add_argument('--num_clusters', type=int, default=64, help='num_clusters')
 parser.add_argument('--final_dim', type=int, default=256, help='final_dim')
-parser.add_argument('--log_path', type=str, default='logs', help='log_path')
+parser.add_argument('--top_k', type=int, default=25, help='top_k')
+
 args = parser.parse_args()
-
-
-def train_demo():
-    # Discard layers at the end of base network
-    encoder = resnet18(pretrained=True)
-    base_model = nn.Sequential(
-        encoder.conv1,
-        encoder.bn1,
-        encoder.relu,
-        encoder.maxpool,
-        encoder.layer1,
-        encoder.layer2,
-        encoder.layer3,
-        encoder.layer4,
-    )
-
-
-    dim = list(base_model.parameters())[-1].shape[0]  # last channels (512)
-
-    # Define model for embedding
-    net_vlad = NetVLAD(num_clusters=args.num_clusters, dim=dim, alpha=1.0)
-    model = EmbedNet(base_model, net_vlad).cuda()
-
-    # Define loss
-    criterion = HardTripletLoss(margin=0.1).cuda()
-
-    # This is just toy example. Typically, the number of samples in each classes are 4.
-    labels = torch.randint(0, 10, (40,)).long()
-    x = torch.rand(40, 3, 128, 128).cuda()
-    output = model(x)  # 40 * 16384
-
-    triplet_loss = criterion(output, labels)
 
 
 def main():
@@ -92,30 +61,15 @@ def main():
     validate_images_dir = os.path.join(args.dataset_dir, args.sequence_validate)
     train_images_dir = os.path.join(args.dataset_dir, args.sequence_train)
 
-    train_database_images_info, train_query_images_info = train_test_split(images_info_train, test_size=0.1, random_state=42)
+    train_database_images_info, train_query_images_info = train_test_split(images_info_train, test_size=0.1, random_state=1)
 
     validate_database_images_info, validate_query_images_info = train_test_split(images_info_validate, test_size=0.4, random_state=20)
-    # train_dataset = NetVladDataset(images_info=train_database_images_info, images_dir=train_images_dir,
-    #                                num_similar_negatives=args.num_similar_neg,
-    #                                positive_search_radius=args.positive_search_radius,
-    #                                negative_filter_radius=args.negative_filter_radius)
-    # train_data_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-    #                                num_workers=args.num_workers)
-
-    encoder = resnet18(pretrained=args.pretrained_embedding)
-    base_model = nn.Sequential(
-        nn.Conv2d(1, 3, (3, 3), 1),
-        nn.ReLU(),
-        encoder.conv1,
-        encoder.bn1,
-        encoder.relu,
-        encoder.maxpool,
-        encoder.layer1,
-        encoder.layer2,
-        encoder.layer3,
-        encoder.layer4
-    )
-    dim = list(base_model.parameters())[-1].shape[0]  # last channels (512)
+    train_dataset = NetVladDataset(images_info=train_database_images_info, images_dir=train_images_dir,
+                                   num_similar_negatives=args.num_similar_neg,
+                                   positive_search_radius=args.positive_search_radius,
+                                   negative_filter_radius=args.negative_filter_radius)
+    train_data_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
+                                   num_workers=args.num_workers)
 
     base_model = BaseModel(300, 300)
     dim = 256
@@ -125,36 +79,28 @@ def main():
     model = EmbedNet(base_model, net_vlad)
 
 
-    saved_model_file = os.path.join(args.saved_model_path, 'model-lazy-triplet.pth.tar')
+    # saved_model_file = os.path.join(args.saved_model_path, 'model-lazy-triplet.pth.tar')
+    saved_model_file = os.path.join(args.saved_model_path, 'spi-netvlad-juxin.pth.tar')
     if args.load_checkpoints:
-        # base_model_checkpoint = torch.load(os.path.join(args.saved_model_path, 'base_model.pth.tar'),
-        #                                    map_location=lambda storage, loc: storage)
-        # net_vlad_checkpoint = torch.load(os.path.join(args.saved_model_path, 'net_vlad.pth.tar'),
-        #                                  map_location=lambda storage, loc: storage)
-        # base_model.load_state_dict(base_model_checkpoint)
-        # net_vlad.load_state_dict(net_vlad_checkpoint)
         model_checkpoint = torch.load(saved_model_file, map_location=lambda storage, loc: storage)
         model.load_state_dict(model_checkpoint)
         print("Loaded model checkpoints from \'{}\'.".format(saved_model_file))
 
-    # base_model.train()
-    # net_vlad.train()
     model.train()
 
     # optimizer = optim.Adam([base_model.parameters(), net_vlad.parameters()], lr=args.learning_rate)
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
-
-    writer = SummaryWriter(log_dir=os.path.join(args.log_path, datetime.now().strftime('%b%d_%H-%M-%S')))
 
     # start training
     # if args.mode == 'train':
     for epoch in range(args.epochs):
         # validate(model, train_images_info, validation_images_info, writer=None)
         epoch = epoch + 1
-        if epoch % 1 == 0:
-            validate(model, validate_database_images_info, validate_query_images_info, validate_images_dir, writer=None)
-            validate(model, train_database_images_info, train_query_images_info, train_images_dir, writer=None)
-        # train(epoch, model, optimizer, train_data_loader, writer=None)
+        if epoch % 3 == 0:
+            validate(model, validate_database_images_info, validate_query_images_info, validate_images_dir)
+            validate(model, train_database_images_info, train_query_images_info, train_images_dir)
+
+        train(epoch, model, optimizer, train_data_loader)
         torch.save(model.state_dict(), saved_model_file)
         print("Saved models in \'{}\'.".format(saved_model_file))
 
@@ -170,7 +116,7 @@ def train(epoch, model, optimizer, train_data_loader, writer=None):
     model.to(device)
     criterion = nn.TripletMarginLoss(margin=args.margin ** 0.5, p=2, reduction='sum')
     with tqdm(train_data_loader) as tq:
-        for query, positives, negatives in tq:
+        for query, positives, negatives, unrelated in tq:
             iteration += 1
             optimizer.zero_grad()
 
@@ -182,23 +128,23 @@ def train(epoch, model, optimizer, train_data_loader, writer=None):
             # print(query.shape)  # B * C * W * H
             # print(positives.shape)  # B * npos * C * W * H
             # print(negatives.shape)  # B * nneg * C * W * H
-            input = torch.cat([query, positives.reshape(-1, C, W, H), negatives.reshape(-1, C, W, H)],
+            # print(unrelated.shape) # B * C * W * H
+            input = torch.cat([query, positives.reshape(-1, C, W, H), negatives.reshape(-1, C, W, H), unrelated],
                               dim=0)  # (B * (1 + npos + nneg)) * C * W * H
             # input = input.reshape(-1, C, W, H) # (B * (1 + npos + nneg)) * C * W * H
             input = input.to(device)
             vlad_encoding = model(input)  # (B * (1 + npos + nneg))(17) * dim_vlad(16384)
             # print(vlad_encoding.shape, B, npos, nneg)
-            vladQ, vladP, vladN = torch.split(vlad_encoding, [B, B * npos, B * nneg])
+            vladQ, vladP, vladN, vladU = torch.split(vlad_encoding, [B, B * npos, B * nneg, B])
             descriptor_dim = vladQ.shape[-1]
             vladQ = vladQ.view(B, 1, descriptor_dim)
-            vladP = vladP.view(B, 1, descriptor_dim)
+            vladP = vladP.view(B, npos, descriptor_dim)
             vladN = vladN.view(B, nneg, descriptor_dim)
+            vladU = vladU.view(B, 1, descriptor_dim)
 
-            # print(vladQ.shape)
-            # print(vladP.shape)
-            # print(vladN.shape)
 
-            loss = lazy_triplet_loss(vladQ, vladP, vladN, device)
+            # loss = lazy_triplet_loss(vladQ, vladP, vladN, device)
+            loss = lazy_quadruplet_loss(vladQ, vladP, vladN, vladU, device)
 
             # loss = 0
             # for i_batch in range(B):
@@ -225,7 +171,6 @@ def train(epoch, model, optimizer, train_data_loader, writer=None):
             del input, vlad_encoding, vladQ, vladP, vladN
             del query, positives, negatives
     torch.cuda.empty_cache()
-    # save model for each epoch
 
 
 # TODO
@@ -234,17 +179,23 @@ def validate(model, database_images_info, query_images_info, images_dir, writer=
                                    images_dir=images_dir, model=model,
                                    generate_database=True,
                                    transforms=input_transforms())
-    true_count = 0
+    top_k_recall = np.zeros(args.top_k)
     for query_image_info in tqdm(query_images_info):
+        is_true_result = np.zeros(args.top_k)
         query_results = image_database.query_image(
-            image_filename=os.path.join(images_dir, query_image_info['image_file']), num_results=1)
+            image_filename=os.path.join(images_dir, query_image_info['image_file']), num_results=args.top_k)
         # print('query_result: \n{}'.format(query_results))
-        for query_result in query_results:
+        for i, query_result in enumerate(query_results):
             diff = query_image_info['position'] - query_result['position']
             if np.sqrt(diff @ diff) < args.positive_search_radius:
-                true_count += 1
-                break
-    print("Precision: {}".format(true_count / len(query_images_info)))
+                # true_count += 1
+                is_true_result[i] = 1
+                # break
+        is_true_result = np.cumsum(is_true_result) > 0
+        # print("is_true_result: {}".format(is_true_result))
+        top_k_recall = top_k_recall + is_true_result
+    # print("Precision: {}".format(true_count / len(query_images_info)))
+    print("top k recalls: {}".format(top_k_recall / len(query_images_info)))
 
 
 def model_test():
@@ -304,6 +255,21 @@ def model_test():
         del input, vlad_encoding, vladQ, vladP, vladN
         del query, positives, negatives
     torch.cuda.empty_cache()
+
+
+def wasserstein_distance_matrix(X, Y):
+    """
+    X: N*D
+    Y: N*D
+    return: N*N
+    """
+    N, D = X.shape
+    diff = X.reshape(N,1,D) - Y.reshape(1,N,D) # N,N,D
+    diff = np.cumsum(diff, axis=2)
+    diff = np.abs(diff)
+    diff = np.sum(diff, axis=2)
+
+    return diff
 
 
 if __name__ == '__main__':
