@@ -16,6 +16,8 @@ import threading
 from global_localization.online.place_recognizer import PlaceRecognizer
 from global_localization.online.feature_extractor import FeatureExtractor
 from global_localization.online.pose_estimator import PoseEstimator
+from global_localization.online.global_localizer import GlobalLocalizer
+
 
 """
 This node handles (Submap Projection Image) SPI images for global localization use.
@@ -57,31 +59,36 @@ class SpiHandler(object):
     def __init__(self):
         super().__init__()
         rospy.init_node('spi_handler', anonymous=True)
-        self.global_localizer_ = PlaceRecognizer()
-        self.feature_extractor_ = FeatureExtractor()
-        self.pose_estimator_ = PoseEstimator()
+        # self.place_recognizer_ = PlaceRecognizer()
+        # self.feature_extractor_ = FeatureExtractor()
+        # self.pose_estimator_ = PoseEstimator()
+        # self.image_id_ = 0
+        # self.query_spi_sub_ = rospy.Subscriber("query_spi_image", CompressedImage, self.query_spi_image_callback, queue_size=1)
         # self.database_spi_sub_ = rospy.Subscriber("query_spi_image", CompressedImage, self.db_spi_image_callback, queue_size=1)
-        self.query_spi_sub_ = rospy.Subscriber("query_spi_image", CompressedImage, self.query_spi_image_callback, queue_size=1)
+
+        self.global_localizer_ = GlobalLocalizer()
+        self.query_spi_sub_ = rospy.Subscriber("query_spi_image", CompressedImage, self.slam_spi_image_callback,
+                                               queue_size=3)
+
 
         self.fake_spi_pub_ = rospy.Publisher('query_spi_image', CompressedImage, queue_size=10)
         sending_thread_ = threading.Thread(target=self.spi_image_player)
         sending_thread_.start()
 
-        self.image_id = 0
 
     def db_spi_image_callback(self, msg):
         image = CompressedImage2Array(msg)
         cv2.imshow("spi_image_callback", image)
         cv2.waitKey(delay=1)
         pose = np.identity(4)
-        self.global_localizer_.save_spi(image)
+        self.place_recognizer_.save_spi(image)
         print(image.shape)
 
     def query_spi_image_callback(self, msg):
         image = CompressedImage2Array(msg)
         image_spinetvlad = cv2.resize(image, (600, 600))
         # print("decoded image msg", image.shape)
-        results = self.global_localizer_.query_spi(image_spinetvlad)
+        results = self.place_recognizer_.query_spi(image_spinetvlad)
 
         if results is not None:
             candidate_image_filenames = [result['image_file'] for result in results]
@@ -96,22 +103,30 @@ class SpiHandler(object):
         features = self.feature_extractor_.extract_features(image_features)
         pose = np.identity(4)
         image_dir = "/media/li/lavie/dataset/birdview_dataset/00/"
-        image_file = image_dir + "submap_" + str(self.image_id) + ".png"
+        image_file = image_dir + "submap_" + str(self.image_id_) + ".png"
+        self.image_id_ += 1
         image_info = {
             "image_file": image_file,
             "position": pose[:3,3],
             "orientation": pose[:3,:3],
             "features": features,
         }
+
         # print("features:", features)
 
         match_result = self.pose_estimator_.estimate_pose(image_info, image_info)
-        print("match_result:", match_result)
+        print("match_result:", match_result is not None)
+        print("query done")
+
+    def slam_spi_image_callback(self, msg):
+        image = CompressedImage2Array(msg)
+        fake_pose = np.identity(4)
+        result = self.global_localizer_.handle_slam_spi(image, fake_pose)
         print("query done")
     
     def spi_image_player(self):
         img_id = 0
-        rate = rospy.Rate(3)  # 3 Hz
+        rate = rospy.Rate(2.5)  # 3 Hz
         while not rospy.is_shutdown():
             img_filename = "/media/li/lavie/dataset/birdview_dataset/juxin_1023_map/submap_" + str(img_id) + ".png"
             rospy.loginfo(img_filename)

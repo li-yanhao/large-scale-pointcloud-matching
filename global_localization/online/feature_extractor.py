@@ -34,4 +34,3 @@ class FeatureExtractor(object):
         with torch.no_grad():
             pred = self.superpoint_({'image': image_tensor})
         return {k : [item.cpu() for item in v] for k, v in pred.items()}
-        return pred

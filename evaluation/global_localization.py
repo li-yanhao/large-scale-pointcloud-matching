@@ -42,7 +42,7 @@ parser.add_argument('--epochs', type=int, default=120, help='epochs')
 parser.add_argument('--num_clusters', type=int, default=64, help='num_clusters')
 parser.add_argument('--final_dim', type=int, default=256, help='final_dim')
 parser.add_argument('--meters_per_pixel', type=float, default=0.20, help='meters_per_pixel')
-parser.add_argument('--top_k', type=int, default=3, help='top_k')
+parser.add_argument('--top_k', type=int, default=4, help='top_k')
 args = parser.parse_args()
 
 

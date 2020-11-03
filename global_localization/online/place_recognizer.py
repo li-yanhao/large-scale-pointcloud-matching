@@ -18,17 +18,17 @@ def input_transforms():
     ])
 
 class PlaceRecognizer(object):
-    def __init__(self, config=None, images_info=None, load_database=False):
+    def __init__(self, config={}, images_info=None, load_database=False):
         super().__init__()
-        if config is None:
-            config = {
-                'saved_model_path': '/media/li/lavie/dataset/birdview_dataset/saved_models',
-                'num_clusters': 64,
-                'final_dim': 256,
-                'save_dir': None,
-                'num_results': 3,
+        default_config = {
+            'saved_model_path': '/media/li/lavie/dataset/birdview_dataset/saved_models',
+            'num_clusters': 64,
+            'final_dim': 256,
+            'save_dir': None,
+            'num_results': 3,
 
-            }
+        }
+        config = {**default_config, **config}
 
         base_model = BaseModel()
         net_vlad = NetVLAD(num_clusters=config["num_clusters"], dim=256, alpha=1.0, outdim=config["final_dim"])
@@ -92,10 +92,16 @@ class PlaceRecognizer(object):
         }
         self.images_info_.append(image_info)
         self.index_.add(netvlad_encoding)
-        print("Saved SPI ", netvlad_encoding.shape)
+        # print("Saved SPI ", netvlad_encoding.shape)
 
         return result_images_info
-    
+
+    @torch.no_grad()
+    def extract_descriptor(self, image):
+        input = self.input_transforms_(image).unsqueeze(0).to(self.device_)
+        with torch.no_grad():
+            netvlad_encoding = self.model_(input).cpu().numpy() # 1, D
+        return netvlad_encoding
 
     @torch.no_grad()
     def _generate_database(self):

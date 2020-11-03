@@ -49,7 +49,7 @@ def compute_relative_pose_with_ransac(target_keypoints, source_keypoints):
     """
     assert(target_keypoints.shape == source_keypoints.shape)
     num_matches = len(target_keypoints)
-    n, k = 1000, 10
+    n, k = 3000, 10
     if num_matches < k:
         return None, None
 
