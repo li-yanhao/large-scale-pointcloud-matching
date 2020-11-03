@@ -243,9 +243,12 @@ class SuperGlue(nn.Module):
             }
 
         # Keypoint normalization.
-        kpts0 = normalize_keypoints(kpts0, data['image0'].shape)
-        kpts1 = normalize_keypoints(kpts1, data['image1'].shape)
-
+        try:
+            kpts0 = normalize_keypoints(kpts0, data['image0'].shape)
+            kpts1 = normalize_keypoints(kpts1, data['image1'].shape)
+        except:
+            kpts0 = normalize_keypoints(kpts0, data['image_shape'])
+            kpts1 = normalize_keypoints(kpts1, data['image_shape'])
         # Keypoint MLP encoder.
         desc0 = desc0 + self.kenc(kpts0, data['scores0'])
         desc1 = desc1 + self.kenc(kpts1, data['scores1'])
