@@ -25,10 +25,10 @@ parser.add_argument('--mode', type=str, default='train', help='Mode', choices=['
 # parser.add_argument('--batch_size', type=int, default=2, help='batch_size')
 parser.add_argument('--dataset_dir', type=str, default='/media/li/lavie/dataset/birdview_dataset/', help='dataset_dir')
 # parser.add_argument('--dataset_dir', type=str, default='/media/li/LENOVO/dataset/kitti/lidar_odometry/birdview_dataset', help='dataset_dir')
-parser.add_argument('--sequence', type=str, default='juxin_0619', help='sequence_all')
-parser.add_argument('--sequence_database', type=str, default='juxin_0617', help='sequence_database')
-parser.add_argument('--sequence_query', type=str, default='juxin_0619', help='sequence_query')
-parser.add_argument('--use_different_sequence', type=bool, default=False, help='use_different_sequence')
+parser.add_argument('--sequence', type=str, default='00', help='sequence_all')
+parser.add_argument('--sequence_database', type=str, default='juxin_1023_map', help='sequence_database')
+parser.add_argument('--sequence_query', type=str, default='juxin_1023_locate', help='sequence_query')
+parser.add_argument('--use_different_sequence', type=bool, default=True, help='use_different_sequence')
 # parser.add_argument('--dataset_dir', type=str, default='/home/li/Documents/wayz/image_data/dataset', help='dataset_dir')
 parser.add_argument('--num_workers', type=int, default=1, help='num_workers')
 # parser.add_argument('--from_scratch', type=bool, default=True, help='from_scratch')
@@ -42,7 +42,7 @@ parser.add_argument('--epochs', type=int, default=120, help='epochs')
 parser.add_argument('--num_clusters', type=int, default=64, help='num_clusters')
 parser.add_argument('--final_dim', type=int, default=256, help='final_dim')
 parser.add_argument('--meters_per_pixel', type=float, default=0.20, help='meters_per_pixel')
-parser.add_argument('--top_k', type=int, default=4, help='top_k')
+parser.add_argument('--top_k', type=int, default=1, help='top_k')
 args = parser.parse_args()
 
 
@@ -280,7 +280,7 @@ def superglue_match(target_image, source_image, resolution : int, matching=None,
     kpts0 = pred['keypoints0'][0].cpu().numpy()
     kpts1 = pred['keypoints1'][0].cpu().numpy()
     matches = pred['matches0'][0].cpu().numpy()
-    confidence = pred['matching_scores0'][0].cpu().detach().numpy()
+    # confidence = pred['matching_scores0'][0].cpu().detach().numpy()
 
     valid = matches > -1
     mkpts0 = kpts0[valid]
@@ -297,10 +297,10 @@ def pipeline_test():
     net_vlad = NetVLAD(num_clusters=args.num_clusters, dim=256, alpha=1.0, outdim=args.final_dim)
     model = EmbedNet(base_model, net_vlad)
 
-    saved_model_file_bevnet = os.path.join(args.saved_model_path, 'model-to-check-top1.pth.tar')
-    model_checkpoint = torch.load(saved_model_file_bevnet, map_location=lambda storage, loc: storage)
+    saved_model_file_spinetvlad = os.path.join(args.saved_model_path, 'model-to-check-top1.pth.tar')
+    model_checkpoint = torch.load(saved_model_file_spinetvlad, map_location=lambda storage, loc: storage)
     model.load_state_dict(model_checkpoint)
-    print("Loaded bevnet checkpoints from \'{}\'.".format(saved_model_file_bevnet))
+    print("Loaded spinetvlad checkpoints from \'{}\'.".format(saved_model_file_spinetvlad))
 
     # images_dir = os.path.join(args.dataset_dir, args.sequence)
     database_images_dir = os.path.join(args.dataset_dir, args.sequence)
@@ -338,7 +338,9 @@ def pipeline_test():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     matching = Matching(config).eval().to(device)
 
-    saved_model_file_superglue = os.path.join(args.saved_model_path, 'superglue-lidar-rotation-invariant.pth.tar')
+    saved_model_file_superglue = os.path.join(args.saved_model_path, 'spsg-rotation-invariant.pth.tar')
+    # saved_model_file_superglue = os.path.join(args.saved_model_path, 'superglue-juxin.pth.tar')
+
     model_checkpoint = torch.load(saved_model_file_superglue, map_location=lambda storage, loc: storage)
     matching.load_state_dict(model_checkpoint)
     print("Loaded superglue checkpoints from \'{}\'.".format(saved_model_file_superglue))
@@ -373,6 +375,7 @@ def pipeline_test():
             target_kpts, source_kpts = superglue_match(target_image, source_image, resolution, matching)
             target_kpts_in_meters = pts_from_pixel_to_meter(target_kpts, args.meters_per_pixel)
             source_kpts_in_meters = pts_from_pixel_to_meter(source_kpts, args.meters_per_pixel)
+            print("len of target_kpts_in_meters:", len(target_kpts_in_meters))
             T_target_source, score = compute_relative_pose_with_ransac_test(target_kpts_in_meters, source_kpts_in_meters)
 
             # T_target_source, score = compute_relative_pose_with_ransac(target_kpts_in_meters, source_kpts_in_meters)
@@ -410,6 +413,7 @@ def pipeline_test():
                     continue
                 if score > best_score and score > min_inliers:
                     best_score = score
+                    # Since the target image is rotated by 180 degrees, its pose is rotated in the same manner
                     T_target_source = np.array(
                         [[-T_target_source[0, 0], -T_target_source[0, 1], 0, -T_target_source[0, 2]],
                          [-T_target_source[1, 0], -T_target_source[1, 1], 0, -T_target_source[1, 2]],

@@ -59,16 +59,20 @@ class SpiHandler(object):
     def __init__(self):
         super().__init__()
         rospy.init_node('spi_handler', anonymous=True)
+        # self.database_spi_sub_ = rospy.Subscriber("query_spi_image", CompressedImage, self.db_spi_image_callback, queue_size=1)
+
+        ### For Test Use ###
         # self.place_recognizer_ = PlaceRecognizer()
         # self.feature_extractor_ = FeatureExtractor()
         # self.pose_estimator_ = PoseEstimator()
         # self.image_id_ = 0
         # self.query_spi_sub_ = rospy.Subscriber("query_spi_image", CompressedImage, self.query_spi_image_callback, queue_size=1)
-        # self.database_spi_sub_ = rospy.Subscriber("query_spi_image", CompressedImage, self.db_spi_image_callback, queue_size=1)
 
+
+        ### For Release Use ###
         self.global_localizer_ = GlobalLocalizer()
         self.query_spi_sub_ = rospy.Subscriber("query_spi_image", CompressedImage, self.slam_spi_image_callback,
-                                               queue_size=3)
+                                               queue_size=1)
 
 
         self.fake_spi_pub_ = rospy.Publisher('query_spi_image', CompressedImage, queue_size=10)
@@ -86,23 +90,23 @@ class SpiHandler(object):
 
     def query_spi_image_callback(self, msg):
         image = CompressedImage2Array(msg)
-        image_spinetvlad = cv2.resize(image, (600, 600))
+        image_spinetvlad = cv2.resize(image, (600, 600), interpolation=cv2.INTER_LINEAR)
         # print("decoded image msg", image.shape)
         results = self.place_recognizer_.query_spi(image_spinetvlad)
 
         if results is not None:
             candidate_image_filenames = [result['image_file'] for result in results]
             # cv2.imshow("query_image", image)
-            result_filename = "/media/li/lavie/dataset/birdview_dataset/juxin_1023_map/" + candidate_image_filenames[0]
+            result_filename = "/media/li/lavie/dataset/birdview_dataset/00/" + candidate_image_filenames[0]
             result_image = cv2.imread(result_filename)
             # cv2.imshow("result_image", result_image)
             # cv2.waitKey(delay=1)
             # print("query result:", candidate_image_filenames)
 
-        image_features = cv2.resize(image, (400, 400))
+        image_features = cv2.resize(image, (400, 400), interpolation=cv2.INTER_LINEAR)
         features = self.feature_extractor_.extract_features(image_features)
         pose = np.identity(4)
-        image_dir = "/media/li/lavie/dataset/birdview_dataset/00/"
+        image_dir = "/media/li/lavie/dataset/birdview_dataset/05/"
         image_file = image_dir + "submap_" + str(self.image_id_) + ".png"
         self.image_id_ += 1
         image_info = {
@@ -121,20 +125,29 @@ class SpiHandler(object):
     def slam_spi_image_callback(self, msg):
         image = CompressedImage2Array(msg)
         fake_pose = np.identity(4)
-        result = self.global_localizer_.handle_slam_spi(image, fake_pose)
-        print("query done")
+        result = self.global_localizer_.handle_slam_spi(image, fake_pose, msg.header.seq)
+        # print("result:", result)
+        pose, score = result
+        if pose is not None:
+            position = pose[:3, 3]
+            print("position: ", position)
+        else:
+            print("query failed")
+        # print("query done")
     
     def spi_image_player(self):
         img_id = 0
         rate = rospy.Rate(2.5)  # 3 Hz
         while not rospy.is_shutdown():
-            img_filename = "/media/li/lavie/dataset/birdview_dataset/juxin_1023_map/submap_" + str(img_id) + ".png"
+            img_filename = "/media/li/lavie/dataset/birdview_dataset/05/submap_" + str(img_id) + ".png"
             rospy.loginfo(img_filename)
-            image = cv2.imread(img_filename)
-            img_id += 1
-            
+            image = cv2.imread(img_filename, cv2.IMREAD_GRAYSCALE)
+
             msg = array2CompressedImage(image)
+            msg.header.seq = img_id
             self.fake_spi_pub_.publish(msg)
+
+            img_id += 1
 
             # cv2.imshow("spi_image", image)
             # cv2.waitKey(delay=1)

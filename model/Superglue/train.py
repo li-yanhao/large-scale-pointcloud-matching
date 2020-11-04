@@ -21,7 +21,7 @@ import visdom
 parser = argparse.ArgumentParser(description='SuperglueTrain')
 parser.add_argument('--mode', type=str, default='train', help='Mode', choices=['train', 'test'])
 parser.add_argument('--batch_size', type=int, default=6, help='batch_size')
-parser.add_argument('--dataset_dir', type=str, default='/media/admini/lavie/dataset/birdview_dataset/', help='dataset_dir')
+parser.add_argument('--dataset_dir', type=str, default='/media/li/lavie/dataset/birdview_dataset/', help='dataset_dir')
 parser.add_argument('--sequence_train', type=str, default='00', help='sequence_train')
 parser.add_argument('--sequence_validate', type=str, default='08', help='sequence_validate')
 parser.add_argument('--num_workers', type=int, default=1, help='num_workers')
@@ -29,7 +29,7 @@ parser.add_argument('--use_gpu', type=bool, default=True, help='use_gpu')
 parser.add_argument('--learning_rate', type=float, default=0.0003, help='learning_rate')
 parser.add_argument('--positive_search_radius', type=float, default=10, help='positive_search_radius')
 parser.add_argument('--saved_model_path', type=str,
-                    default='/media/admini/lavie/dataset/birdview_dataset/saved_models', help='saved_model_path')
+                    default='/media/li/lavie/dataset/birdview_dataset/saved_models', help='saved_model_path')
 parser.add_argument('--epochs', type=int, default=100, help='epochs')
 parser.add_argument('--load_checkpoints', type=bool, default=True, help='load_checkpoints')
 parser.add_argument('--meters_per_pixel', type=float, default=0.25, help='meters_per_pixel')
@@ -172,7 +172,8 @@ def main():
     train_data_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     validate_data_loader = DataLoader(validate_dataset, batch_size=1, shuffle=True)
 
-    saved_model_file = os.path.join(args.saved_model_path, 'superglue-lidar-rotation-invariant.pth.tar')
+    saved_model_file = os.path.join(args.saved_model_path, 'spsg-rotation-invariant.pth.tar')
+    # saved_model_file = os.path.join(args.saved_model_path, 'spsg-juxin.pth.tar')
 
     config = {
         'superpoint': {
@@ -464,62 +465,6 @@ def validate(epoch, model, data_loader, viz_validate=None):
     print("average precision: {}".format(overall_precision / overall_count))
     print("average true pairs: {}".format(overall_true_pairs / overall_count))
     print("average detected points: {}".format(overall_detection / overall_count))
-
-
-
-def validate_sift(sift, data_loader):
-    accum_accuracy = 0
-    accum_recall = 0
-    accum_precision = 0
-    accum_true_pairs = 0
-    count_accumulate = 0
-
-    overall_recall = 0
-    overall_precision = 0
-    overall_true_pairs = 0
-    overall_count = 0
-
-    device = torch.device("cuda" if args.use_gpu else "cpu")
-    with tqdm(data_loader) as tq:
-        for target, source, T_target_source in tq:
-            assert (target.shape == source.shape)
-            B, C, W, H = target.shape
-            assert (B == 1 and C == 1)
-            target = target.squeeze()
-            source = source.squeeze()
-
-            target_kpts = sift.detect(target, None)
-            source_kpts = sift.detect(source, None)
-
-            if len(target_kpts) == 0 or len(source_kpts) == 0:
-                continue
-            #
-            # # in superglue/numpy/tensor the coordinates are (i,j) which correspond to (v,u) in PIL Image/opencv
-            # target_kpts_in_meters = pts_from_pixel_to_meter(target_kpts, args.meters_per_pixel)
-            # source_kpts_in_meters = pts_from_pixel_to_meter(source_kpts, args.meters_per_pixel)
-            # match_mask_ground_truth = make_ground_truth_matrix(target_kpts_in_meters, source_kpts_in_meters,
-            #                                                    T_target_source[0],
-            #                                                    args.tolerance_in_meters)
-            # # print(match_mask_ground_truth[:-1,:-1].sum())
-            #
-            # # match_mask_ground_truth
-            # # matches = pred['matches0'][0].cpu().numpy()
-            # # confidence = pred['matching_scores0'][0].cpu().detach().numpy()
-            # if match_mask_ground_truth[:-1, :-1].sum() > 0 and (pred['matches0'] > 0).sum() > 0 and (
-            #         pred['matches1'] > 0).sum() > 0:
-            #     metrics = compute_metrics(pred['matches0'], pred['matches1'], match_mask_ground_truth)
-            #
-            #     accum_accuracy += float(metrics['matches0_acc'])
-            #     accum_recall += float(metrics['matches0_recall'])
-            #     accum_precision += float(metrics['matches0_precision'])
-            #     accum_true_pairs += match_mask_ground_truth[:-1, :-1].sum()
-            #     count_accumulate += 1
-            #
-            #     overall_recall += float(metrics['matches0_recall'])
-            #     overall_precision += float(metrics['matches0_precision'])
-            #     overall_true_pairs += match_mask_ground_truth[:-1, :-1].sum()
-            #     overall_count += 1
-    pass
 
 
 if __name__ == '__main__':

@@ -6,8 +6,7 @@ def compute_relative_pose(target_points, source_points):
     """
     :param target_keypoints: N * 2
     :param source_keypoints: N * 2
-    :return: T_target_source_best: 4 * 4
-             score: float
+    :return: T_target_source_restored: 4 * 4
     """
     assert(len(target_points) == len(target_points))
 
@@ -49,7 +48,7 @@ def compute_relative_pose_with_ransac(target_keypoints, source_keypoints):
     """
     assert(target_keypoints.shape == source_keypoints.shape)
     num_matches = len(target_keypoints)
-    n, k = 3000, 10
+    n, k = 1000, 10
     if num_matches < k:
         return None, None
 
@@ -84,7 +83,7 @@ def compute_relative_pose_with_ransac(target_keypoints, source_keypoints):
     diff = source_keypoints @ rotations.transpose(1,2) + translations.unsqueeze(1) - target_keypoints
     distances_squared = torch.sum(diff * diff, dim=2)
 
-    distance_tolerance = 1.0
+    distance_tolerance = 0.5
     scores = (distances_squared < (distance_tolerance**2)).sum(dim=1)
     score = torch.max(scores)
     best_index = torch.argmax(scores)
