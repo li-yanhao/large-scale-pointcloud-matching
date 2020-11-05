@@ -98,8 +98,8 @@ class PlaceRecognizer(object):
 
     @torch.no_grad()
     def extract_descriptor(self, image):
-        input = self.input_transforms_(image).unsqueeze(0).to(self.device_)
         with torch.no_grad():
+            input = self.input_transforms_(image).unsqueeze(0).to(self.device_)
             netvlad_encoding = self.model_(input).cpu().numpy() # 1, D
         return netvlad_encoding
 

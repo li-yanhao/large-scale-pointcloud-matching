@@ -18,10 +18,10 @@ class GlobalLocalizer(object):
             # "database_struct_file": "/media/li/lavie/dataset/birdview_dataset/struct_file_juxin_1023_map.txt",
             # "database_images_dir": "/media/li/lavie/dataset/birdview_dataset/juxin_1023_map",
             # "tmp_image_dir": "/media/li/lavie/dataset/birdview_dataset/juxin_1023_map/",
-            "database_struct_file": "/media/li/lavie/dataset/birdview_dataset/struct_file_juxin_0617.txt",
-            "database_images_dir": "/media/li/lavie/dataset/birdview_dataset/juxin_0617",
-            "tmp_image_dir": "/media/li/lavie/dataset/birdview_dataset/juxin_0617/",
-            "netvlad_imgsize": 400,
+            "database_struct_file": "/media/li/lavie/dataset/birdview_dataset/struct_file_juxin_1023_map.txt",
+            "database_images_dir": "/media/li/lavie/dataset/birdview_dataset/juxin_1023_map",
+            "tmp_image_dir": "/media/li/lavie/dataset/birdview_dataset/juxin_1023_map",
+            "netvlad_imgsize": 1000,
             "vlad_dim": 256,
             "top_k": 3,
             "meters_per_pixel": 0.25,
@@ -29,7 +29,7 @@ class GlobalLocalizer(object):
             "min_inliers": 20,
             "max_inliers": 40,
             "loop_detect_threshold": 10,
-            "pure_localization": False,
+            "pure_localization": True,
         }
         self.config_ = {**default_config, **config}
         self.database_images_dir_ = self.config_["database_images_dir"]
@@ -79,7 +79,7 @@ class GlobalLocalizer(object):
             # search spi in database
             if not self.pure_localization_:
                 # Deny some adjacent results
-                distances, result_indices = self.index_.search(global_descriptor, 50)
+                distances, result_indices = self.index_.search(global_descriptor, 30)
                 result_indices = result_indices[0]
                 result_indices = result_indices[result_indices >= 0]
                 result_indices = result_indices[result_indices < (len(self.images_info_) - self.config_['loop_detect_threshold'])]

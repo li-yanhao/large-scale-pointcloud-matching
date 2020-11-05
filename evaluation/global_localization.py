@@ -26,8 +26,8 @@ parser.add_argument('--mode', type=str, default='train', help='Mode', choices=['
 parser.add_argument('--dataset_dir', type=str, default='/media/li/lavie/dataset/birdview_dataset/', help='dataset_dir')
 # parser.add_argument('--dataset_dir', type=str, default='/media/li/LENOVO/dataset/kitti/lidar_odometry/birdview_dataset', help='dataset_dir')
 parser.add_argument('--sequence', type=str, default='00', help='sequence_all')
-parser.add_argument('--sequence_database', type=str, default='juxin_1023_map', help='sequence_database')
-parser.add_argument('--sequence_query', type=str, default='juxin_1023_locate', help='sequence_query')
+parser.add_argument('--sequence_database', type=str, default='juxin_0617', help='sequence_database')
+parser.add_argument('--sequence_query', type=str, default='juxin_0619', help='sequence_query')
 parser.add_argument('--use_different_sequence', type=bool, default=True, help='use_different_sequence')
 # parser.add_argument('--dataset_dir', type=str, default='/home/li/Documents/wayz/image_data/dataset', help='dataset_dir')
 parser.add_argument('--num_workers', type=int, default=1, help='num_workers')
@@ -112,8 +112,11 @@ def plot_images(images, cols):
 
 
 def compute_relative_pose(target_points, source_points):
-    # target_points: N * 2
-    # source_points: N * 2
+    """
+    :param target_keypoints: N * 2
+    :param source_keypoints: N * 2
+    :return: T_target_source: 4 * 4
+    """
     assert(len(target_points) == len(target_points))
 
     target_points = torch.Tensor(target_points)
@@ -138,11 +141,11 @@ def compute_relative_pose(target_points, source_points):
 
     rot_mat = np.array(rot_mat)
     trans = np.array(trans).reshape(-1, 1)
-    T_target_source_restored = np.hstack([rot_mat, trans])
-    T_target_source_restored = np.vstack([T_target_source_restored, np.array([0, 0, 1])])
+    T_target_source = np.hstack([rot_mat, trans])
+    T_target_source = np.vstack([T_target_source, np.array([0, 0, 1])])
 
     # print('T_target_source_restored:\n', T_target_source_restored)
-    return T_target_source_restored
+    return T_target_source
 
 
 

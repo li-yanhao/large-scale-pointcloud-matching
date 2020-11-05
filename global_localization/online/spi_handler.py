@@ -71,13 +71,13 @@ class SpiHandler(object):
 
         ### For Release Use ###
         self.global_localizer_ = GlobalLocalizer()
-        self.query_spi_sub_ = rospy.Subscriber("query_spi_image", CompressedImage, self.slam_spi_image_callback,
+        self.query_spi_sub_ = rospy.Subscriber("/spi_image/compressed", CompressedImage, self.slam_spi_image_callback,
                                                queue_size=1)
 
 
         self.fake_spi_pub_ = rospy.Publisher('query_spi_image', CompressedImage, queue_size=10)
-        sending_thread_ = threading.Thread(target=self.spi_image_player)
-        sending_thread_.start()
+        # sending_thread_ = threading.Thread(target=self.spi_image_player)
+        # sending_thread_.start()
 
 
     def db_spi_image_callback(self, msg):
