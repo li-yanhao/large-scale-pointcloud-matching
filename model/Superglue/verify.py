@@ -15,12 +15,12 @@ from model.Superglue.dataset import pts_from_meter_to_pixel, pts_from_pixel_to_m
 
 
 parser = argparse.ArgumentParser(description='SuperglueVerify')
-parser.add_argument('--dataset_dir', type=str, default='/media/admini/LENOVO/dataset/kitti/lidar_odometry/birdview_dataset/tmp/', help='dataset_dir')
+parser.add_argument('--dataset_dir', type=str, default='/media/li/lavie/dataset/birdview_dataset/', help='dataset_dir')
 parser.add_argument('--sequence', type=str, default='00', help='sequence')
 parser.add_argument('--use_gpu', type=bool, default=True, help='use_gpu')
 parser.add_argument('--positive_search_radius', type=float, default=10, help='positive_search_radius')
 parser.add_argument('--saved_model_path', type=str,
-                    default='/media/admini/lavie/dataset/birdview_dataset/saved_models', help='saved_model_path')
+                    default='/media/li/lavie/dataset/birdview_dataset/saved_models', help='saved_model_path')
 parser.add_argument('--meters_per_pixel', type=float, default=0.2, help='meters_per_pixel')
 parser.add_argument('--tolerance_in_pixels', type=float, default=4, help='tolerance_in_pixels')
 parser.add_argument('--tolerance_in_meters', type=float, default=1, help='tolerance_in_meters')
@@ -127,7 +127,7 @@ def verify():
     pass
 
 
-def visualize_matching():
+def visualize_matching_all():
     """
     This function visualize the feature point matching pipeline
     """
@@ -138,9 +138,9 @@ def visualize_matching():
                                positive_search_radius=args.positive_search_radius,
                                meters_per_pixel=args.meters_per_pixel,
                                return_filename=True)
-    data_loader = DataLoader(dataset, batch_size=1, shuffle=True)
+    data_loader = DataLoader(dataset, batch_size=1, shuffle=False)
 
-    saved_model_file = os.path.join(args.saved_model_path, 'superglue-lidar-birdview.pth.tar')
+    saved_model_file = os.path.join(args.saved_model_path, 'spsg-lidar-birdview.pth.tar')
 
     config = {
         'superpoint': {
@@ -186,8 +186,8 @@ def visualize_matching():
                                                            args.tolerance_in_meters)
         target_image_raw = target[0][0].cpu().numpy()
         source_image_raw = source[0][0].cpu().numpy()
-        target_image_raw = np.stack([target_image_raw] * 3, -1) * 30
-        source_image_raw = np.stack([source_image_raw] * 3, -1) * 30
+        target_image_raw = np.stack([target_image_raw] * 3, -1) * 10
+        source_image_raw = np.stack([source_image_raw] * 3, -1) * 10
 
         cv2.imshow('target_image_raw', target_image_raw)
         cv2.imshow('source_image_raw', source_image_raw)
@@ -212,48 +212,114 @@ def visualize_matching():
         source_kpts = np.round(source_kpts).astype(int)
         source_kpts_in_target_img = np.round(source_kpts_in_target_img).astype(int)
 
-        target_image_poi = target_image_raw.copy()
-        source_image_poi = source_image_raw.copy()
-        for (x0, y0), (x1, y1) in zip(source_kpts, target_kpts):
-            # c = c.tolist()
-            # cv2.line(target_image, (x0, y0), (x0 + 50, y0 + 50),
-            #          color=[255,0,0], thickness=1, lineType=cv2.LINE_AA)
-            # display line end-points as circles
-            cv2.circle(target_image_poi, (x1, y1), 4, (0, 255, 0), 1, lineType=cv2.LINE_AA)
-            cv2.circle(source_image_poi, (x0, y0), 4, (255, 0, 0), 1, lineType=cv2.LINE_AA)
-            # cv2.circle(out, (x1 + margin + W0, y1), 2, c, -1,
-            #            lineType=cv2.LINE_AA)
+        target_image_poi = visualize_poi(target_image_raw.copy(), target_kpts, (0, 1, 0))
+        source_image_poi = visualize_poi(source_image_raw.copy(), source_kpts, (1, 0, 0))
+        # target_image_poi = target_image_raw.copy()
+        # source_image_poi = source_image_raw.copy()
+        # for (x0, y0), (x1, y1) in zip(source_kpts, target_kpts):
+        #     # c = c.tolist()
+        #     # cv2.line(target_image, (x0, y0), (x0 + 50, y0 + 50),
+        #     #          color=[255,0,0], thickness=1, lineType=cv2.LINE_AA)
+        #     # display line end-points as circles
+        #     cv2.circle(target_image_poi, (x1, y1), 4, (0, 255, 0), 1, lineType=cv2.LINE_AA)
+        #     cv2.circle(source_image_poi, (x0, y0), 4, (255, 0, 0), 1, lineType=cv2.LINE_AA)
+        #     # cv2.circle(out, (x1 + margin + W0, y1), 2, c, -1,
+        #     #            lineType=cv2.LINE_AA)
 
         cv2.imshow('target_image_poi', target_image_poi)
         cv2.imshow('source_image_poi', source_image_poi)
-
-        # Matching visualize
-        margin = 10
-        match_image = np.ones((H, 2 * W + margin))
-        match_image = np.stack([match_image] * 3, -1)
-
-        match_image[:, :W] = target_image_poi
-        match_image[:, W + margin:] = source_image_poi
 
         matches = pred['matches0'][0].cpu().numpy()
 
         valid = matches > -1
         target_kpts_matched = target_kpts[valid]
         source_kpts_matched = source_kpts[matches[valid]]
-        for (x0, y0), (x1, y1) in zip(target_kpts_matched, source_kpts_matched):
-            cv2.line(match_image, (x0, y0), (x1 + margin + W, y1),
-                     color=[0.9, 0.9, 0], thickness=1, lineType=cv2.LINE_AA)
-            # display line end-points as circles
-            # cv2.circle(match_image, (x0, y0), 2, (0, 255, 0), -1, lineType=cv2.LINE_AA)
-            # cv2.circle(match_image, (x1 + margin + W, y1), 2, (255, 0, 0), -1,
-            #            lineType=cv2.LINE_AA)
+
+        # Matching visualize
+        match_image = visualize_matching(target_image_poi, source_image_poi, target_kpts_matched, source_kpts_matched)
+
+        W, H = 480, 460
+        h_margin = 10
+        v_margin = 10
+        window_image = np.ones((2 * H + 2 * v_margin, 2 * W + h_margin, 3))
+        window_image[:H , :(W )] = cv2.resize(target_image_raw, (W, H ), cv2.INTER_NEAREST)
+        window_image[:H , -W:] = cv2.resize(source_image_raw, (W, H), cv2.INTER_NEAREST)
+        window_image[H+v_margin:, :] = cv2.resize(match_image, (2 * W + h_margin, H+v_margin), cv2.INTER_NEAREST)
+
         cv2.imshow('match_image', match_image)
+        cv2.imshow("window_image", window_image)
         cv2.waitKey(0)
+
+        # margin = 10
+        # match_image = np.ones((H, 2 * W + margin))
+        # match_image = np.stack([match_image] * 3, -1)
+        #
+        # match_image[:, :W] = target_image_poi
+        # match_image[:, W + margin:] = source_image_poi
+        #
+        #
+        # for (x0, y0), (x1, y1) in zip(target_kpts_matched, source_kpts_matched):
+        #     cv2.line(match_image, (x0, y0), (x1 + margin + W, y1),
+        #              color=[0.9, 0.9, 0], thickness=1, lineType=cv2.LINE_AA)
+        #     # display line end-points as circles
+        #     # cv2.circle(match_image, (x0, y0), 2, (0, 255, 0), -1, lineType=cv2.LINE_AA)
+        #     # cv2.circle(match_image, (x1 + margin + W, y1), 2, (255, 0, 0), -1,
+        #     #            lineType=cv2.LINE_AA)
+
 
     torch.set_grad_enabled(True)
     pass
 
 
+def visualize_poi(image, keypoints, color=(0,255,0)):
+    for (x0, y0) in keypoints:
+        # display line end-points as circles
+        cv2.circle(image, (x0, y0), 4, color, 1, lineType=cv2.LINE_AA)
+    return image
+
+
+def visualize_matching(target_image, source_image, target_kpts_matched, source_kpts_matched, match_labels=None, threshold=50):
+    """
+    :param target_image: H * W * C
+    :param source_image: H * W * C
+    :param target_kpts_matched: float or int, N * 2
+    :param source_kpts_matched: float or int, N * 2
+    :param match_labels: bool, N
+    :return: match_image: H * (2 * W + 10) * C
+    """
+    target_kpts_matched = np.round(target_kpts_matched).astype(int)
+    source_kpts_matched = np.round(source_kpts_matched).astype(int)
+    assert(target_image.shape == source_image.shape)
+    assert(target_kpts_matched.shape == source_kpts_matched.shape)
+    H, W, _ = target_image.shape
+    N, _ = target_kpts_matched.shape
+    h_margin = 10
+    v_margin = 50
+    match_image = np.ones((H + v_margin, 2 * W + h_margin))
+    match_image = np.stack([match_image] * 3, -1)
+
+    match_image[-H:, :W] = target_image
+    match_image[-H:, W + h_margin:] = source_image
+
+    if match_labels is None:
+        match_labels = np.ones(N).astype(bool)
+    for (x0, y0), (x1, y1), label in zip(target_kpts_matched, source_kpts_matched, match_labels):
+        if label == True:
+            cv2.line(match_image, (x0, y0 + v_margin), (x1 + h_margin + W, y1 + v_margin),
+                     color=[0.9, 0.9, 0], thickness=1, lineType=cv2.LINE_AA)
+        else:
+            cv2.line(match_image, (x0, y0 + v_margin), (x1 + h_margin + W, y1 + v_margin),
+                     color=[0,  0, 1], thickness=1, lineType=cv2.LINE_AA)
+    match_image = cv2.putText(match_image, "query SPI", (10, v_margin // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,0), 2)
+    match_image = cv2.putText(match_image, "retrieved database SPI", (2 * W - 250, v_margin // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,0), 2)
+    match_image = cv2.putText(match_image, "inlier matched pairs: " + str(int(match_labels.sum())), (W - 300, v_margin // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,0), 2)
+    if match_labels.sum() > threshold:
+        match_image = cv2.putText(match_image, "=> Success", (W, v_margin // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 1, 0), 2)
+    else:
+        match_image = cv2.putText(match_image, "=> Failure", (W, v_margin // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 1), 2)
+    return match_image
+
+
 if __name__ == '__main__':
     # verify()
-    visualize_matching()
+    visualize_matching_all()

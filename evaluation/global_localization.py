@@ -1,3 +1,4 @@
+import cv2
 from model.Birdview.dataset import *
 from model.Birdview.base_model import *
 from model.Birdview.netvlad import *
@@ -14,11 +15,11 @@ from model.Superglue.dataset import pts_from_meter_to_pixel, pts_from_pixel_to_m
 from model.Superglue.dataset import input_transforms as superglue_input_transforms
 import torchvision.transforms.functional as TF
 # import model.Superglue.dataset
+from model.Superglue.verify import visualize_poi, visualize_matching
 
-
-# 1. create database
-# 2. query a lidar scan (birdview image)
-
+import rospy
+from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Path
 
 parser = argparse.ArgumentParser(description='GlobalLocalization')
 parser.add_argument('--mode', type=str, default='train', help='Mode', choices=['train', 'test'])
@@ -42,7 +43,7 @@ parser.add_argument('--epochs', type=int, default=120, help='epochs')
 parser.add_argument('--num_clusters', type=int, default=64, help='num_clusters')
 parser.add_argument('--final_dim', type=int, default=256, help='final_dim')
 parser.add_argument('--meters_per_pixel', type=float, default=0.20, help='meters_per_pixel')
-parser.add_argument('--top_k', type=int, default=1, help='top_k')
+parser.add_argument('--top_k', type=int, default=3, help='top_k')
 args = parser.parse_args()
 
 
@@ -100,7 +101,7 @@ def visualize_netvlad():
 
 def plot_images(images, cols):
     plt.figure()
-    # plt.subplot(1, 1, 1)
+    # plt.subplot(1, 1, 1)s
     # plt.imshow(images[0])
 
     for i in range(0, len(images)):
@@ -195,7 +196,7 @@ def compute_relative_pose_with_ransac(target_keypoints, source_keypoints):
 
 
 
-def compute_relative_pose_with_ransac_test(target_keypoints, source_keypoints):
+def compute_relative_pose_with_ransac_test(target_keypoints, source_keypoints, output_matches=False):
     """
     :param target_keypoints: N * 2
     :param source_keypoints: N * 2
@@ -206,7 +207,10 @@ def compute_relative_pose_with_ransac_test(target_keypoints, source_keypoints):
     num_matches = len(target_keypoints)
     n, k = 1000, 10
     if num_matches < k:
-        return None, None
+        if output_matches:
+            return None, None, None,
+        else:
+            return None, None
 
     target_keypoints = torch.Tensor(target_keypoints)
     source_keypoints = torch.Tensor(source_keypoints)
@@ -247,15 +251,18 @@ def compute_relative_pose_with_ransac_test(target_keypoints, source_keypoints):
     translation = translations[best_index]
     T_target_source = torch.cat((rotation, translation[...,None]), dim=1)
     T_target_source = torch.cat((T_target_source, torch.Tensor([[0,0,1]])), dim=0)
-    return T_target_source, score
 
+    if output_matches:
+        return T_target_source, score, (distances_squared < (distance_tolerance**2))[best_index]
+    else:
+        return T_target_source, score
 
 def superglue_match(target_image, source_image, resolution : int, matching=None, device=None):
     config = {
         'superpoint': {
             'nms_radius': 4,
             'keypoint_threshold': 0.005,
-            'max_keypoints': -1
+            'max_keypoints': 200,
         },
         'Superglue': {
             'weights': 'outdoor',
@@ -290,7 +297,7 @@ def superglue_match(target_image, source_image, resolution : int, matching=None,
     mkpts1 = kpts1[matches[valid]]
     # print(mkpts0, mkpts1)
 
-    return mkpts0, mkpts1
+    return mkpts0, mkpts1, kpts0, kpts1
 
 
 def pipeline_test():
@@ -356,6 +363,20 @@ def pipeline_test():
     last_T_w_source_gt = None
 
     true_count = 0
+
+    rospy.init_node('global_localization', anonymous=False)
+    pose_publisher = rospy.Publisher('query_spi_pose', PoseStamped, queue_size=10)
+    gt_pose_publisher = rospy.Publisher('gt_query_spi_pose', PoseStamped, queue_size=10)
+    position_offset = np.array([851, -332, 1204])
+    T_offset_w = None
+
+    path_estimation_publisher = rospy.Publisher('query_spi_path', Path, queue_size=10)
+    path_gt_publisher = rospy.Publisher('gt_spi_path', Path, queue_size=10)
+    path_estimated = Path()
+    path_gt = Path()
+    path_estimated.header.frame_id = 'velodyne'
+    path_gt.header.frame_id = 'velodyne'
+
     for query_image_info in tqdm(query_images_info):
         query_results = image_database.query_image(
             image_filename=os.path.join(query_images_dir, query_image_info['image_file']), num_results=args.top_k+1)
@@ -367,25 +388,38 @@ def pipeline_test():
         # print('query_result: \n{}'.format(query_results))
         best_score = -1
         T_w_source_best = None
+        target_image_best = None
+
         min_inliers = 20
         max_inliers = 30
         # min_inliers = 0
         # max_inliers = 0
         resolution = int(100 / args.meters_per_pixel)
+        source_image = Image.open(os.path.join(query_images_dir, query_image_info['image_file']))
         for query_result in query_results:
             target_image = Image.open(os.path.join(database_images_dir, query_result['image_file']))
-            source_image = Image.open(os.path.join(query_images_dir, query_image_info['image_file']))
-            target_kpts, source_kpts = superglue_match(target_image, source_image, resolution, matching)
+
+
+
+
+
+            # source_image_displayed = cv2
+            target_kpts, source_kpts, raw_target_kpts, raw_source_kpts = superglue_match(target_image, source_image, resolution, matching)
             target_kpts_in_meters = pts_from_pixel_to_meter(target_kpts, args.meters_per_pixel)
             source_kpts_in_meters = pts_from_pixel_to_meter(source_kpts, args.meters_per_pixel)
-            print("len of target_kpts_in_meters:", len(target_kpts_in_meters))
-            T_target_source, score = compute_relative_pose_with_ransac_test(target_kpts_in_meters, source_kpts_in_meters)
+            # print("len of target_kpts_in_meters:", len(target_kpts_in_meters))
 
+
+            T_target_source, score, matches = compute_relative_pose_with_ransac_test(target_kpts_in_meters, source_kpts_in_meters, output_matches=True)
             # T_target_source, score = compute_relative_pose_with_ransac(target_kpts_in_meters, source_kpts_in_meters)
             # T_target_source, score = compute_relative_pose(target_kpts_in_meters, source_kpts_in_meters), len(target_kpts)
+
             if score is None:
                 continue
-            if score > best_score and score > min_inliers:
+            if score > best_score:
+                target_image_best = target_image
+                best_target_kpts, best_source_kpts, best_raw_target_kpts, best_raw_source_kpts = target_kpts, source_kpts, raw_target_kpts, raw_source_kpts
+            if score > best_score and score > min_inliers and best_score < max_inliers:
                 best_score = score
                 # TODO: the way we handle the se3 may be inappropriate
                 T_target_source = np.array([[T_target_source[0,0], T_target_source[0,1], 0, T_target_source[0,2]],
@@ -405,7 +439,7 @@ def pipeline_test():
             if INVERSE_AUGMENTATION:
                 # tf = superglue_input_transforms(args.meters_per_pixel, 180)
                 target_image_inv = TF.rotate(target_image, 180)
-                target_kpts_inv, source_kpts = superglue_match(target_image_inv, source_image, resolution, matching)
+                target_kpts_inv, source_kpts, _, _ = superglue_match(target_image_inv, source_image, resolution, matching)
                 target_kpts_in_meters_inv = pts_from_pixel_to_meter(target_kpts_inv, args.meters_per_pixel)
                 source_kpts_in_meters = pts_from_pixel_to_meter(source_kpts, args.meters_per_pixel)
                 # T_target_source, score = compute_relative_pose_with_ransac_test(target_kpts_in_meters_inv,
@@ -434,10 +468,54 @@ def pipeline_test():
             if best_score > max_inliers:
                 break
 
+        # display raw query spi
+        query_image = np.array(source_image) / 255 * 10
+        query_image = cv2.resize(query_image, (resolution, resolution), cv2.INTER_NEAREST)
+
+        # cv2.imshow("query SPI", query_image)
+
+        # display raw candidate spi
+        candidate_image = np.array(target_image_best) / 255 * 10
+        candidate_image = cv2.resize(candidate_image, (resolution, resolution), cv2.INTER_NEAREST)
+
+        # cv2.imshow("database SPI", candidate_image)
+
+        query_image = np.stack([query_image] * 3, -1)
+        candidate_image = np.stack([candidate_image] * 3, -1)
+
+        # display query spi with features
+        query_image_with_poi = visualize_poi(query_image.copy(), best_raw_source_kpts, color=(255,0,0))
+        # cv2.imshow("query spi with features", query_image_with_poi)
+
+        # display candidate spi with features
+        candidate_image_with_poi = visualize_poi(candidate_image.copy(), best_raw_target_kpts, color=(0, 255, 0))
+        # cv2.imshow("candidate spi with features", candidate_image_with_poi)
+
+        # display matching image
+        match_image = visualize_matching(query_image_with_poi, candidate_image_with_poi, best_source_kpts, best_target_kpts, matches, threshold=min_inliers)
+        # cv2.imshow("matching result", match_image)
+
+        # display all images inside a window
+        W, H = 480, 460
+        h_margin = 10
+        v_margin = 10
+        window_image = np.ones((2 * H + 2 * v_margin, 2 * W + h_margin, 3))
+        window_image[:H, :(W)] = cv2.resize(query_image, (W, H), cv2.INTER_NEAREST)
+        window_image[:H, -W:] = cv2.resize(candidate_image, (W, H), cv2.INTER_NEAREST)
+        window_image[H + v_margin:, :] = cv2.resize(match_image, (2 * W + h_margin, H + v_margin), cv2.INTER_NEAREST)
+        cv2.imshow("LiDAR global localization using SPI", window_image)
+
+
+
+        cv2.waitKey(1)
+
         # ground truch pose
         T_w_source_gt = np.hstack([R.from_quat(query_image_info['orientation'][[1, 2, 3, 0]]).as_matrix(),
                                    query_image_info['position'].reshape(3, 1)])
         T_w_source_gt = np.vstack([T_w_source_gt, np.array([0, 0, 0, 1])])
+
+        if T_offset_w is None:
+            T_offset_w = np.linalg.inv(T_w_source_gt)
 
         # record travelled distance
         if last_T_w_source_gt is not None:
@@ -455,11 +533,43 @@ def pipeline_test():
             translation_errors.append(delta_translation)
             rotation_errors.append(delta_degree)
             success_records.append((accumulated_distance, True))
+
+            # publish estimated pose and path
+            msg = PoseStamped()
+            msg.header.stamp = rospy.Time.now()
+            msg.header.frame_id = 'velodyne'
+            T_offset_source_best = T_offset_w @ T_w_source_best
+            msg.pose.position.x, msg.pose.position.y, msg.pose.position.z = T_offset_source_best[:3, 3]
+            quaternion = R.from_matrix(T_offset_source_best[:3,:3]).as_quat()
+            msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w = quaternion
+            pose_publisher.publish(msg)
+
+            path_estimated.poses.append(msg)
+            path_estimated.header.stamp = rospy.Time.now()
+            path_estimation_publisher.publish(path_estimated)
+
+
         else:
             print('Global localization failed.')
             success_records.append((accumulated_distance, False))
             pass
-            # translation_errors.append(float('nan'))
+
+        # publish ground truth pose and path
+        gt_msg = PoseStamped()
+        gt_msg.header.stamp = rospy.Time.now()
+        gt_msg.header.frame_id = 'velodyne'
+        T_offset_source_gt = T_offset_w @ T_w_source_gt
+        gt_msg.pose.position.x, gt_msg.pose.position.y, gt_msg.pose.position.z = T_offset_source_gt[:3, 3]
+        quaternion = R.from_matrix(T_offset_source_gt[:3, :3]).as_quat()
+        gt_msg.pose.orientation.x, gt_msg.pose.orientation.y, gt_msg.pose.orientation.z, gt_msg.pose.orientation.w = quaternion
+        gt_pose_publisher.publish(gt_msg)
+
+        path_gt.poses.append(gt_msg)
+        path_gt.header.stamp = rospy.Time.now()
+        path_gt_publisher.publish(path_gt)
+
+
+        # translation_errors.append(float('nan'))
         # print('accumulated_distance', accumulated_distance)
 
     translation_errors = np.array(translation_errors)
@@ -470,7 +580,9 @@ def pipeline_test():
     for theta in [1.0, 2, 3, 4, 5, 6, 7, 8, 9, 10]:
         print('Percentage of rotation errors under {} degrees: {}'.format(theta, (rotation_errors<theta).sum() / len(rotation_errors)))
 
-    plt.scatter(np.linspace(0, 50, num=len(translation_errors)), np.array(translation_errors))
+    plt.scatter(np.linspace(0, len(translation_errors), num=len(translation_errors)), np.array(translation_errors))
+    plt.xlabel("SPI id")
+    plt.ylabel("translation error")
     plt.show()
 
     travelled_distances = [0.2, 0.4, 0.6, 0.8, 1.0, 1.5, 2, 3, 4, 5, 6, 8, 10, 15, 20, 25, 30, 35, 40, 45, 50]
@@ -481,7 +593,7 @@ def pipeline_test():
     # plt.plot([0, 1], [0, 1], '--', color=(0.6, 0.6, 0.6), label="Luck")
     plt.xlabel("travelled distance")
     plt.ylabel("probabilities")
-    plt.show()
+    # plt.show()
 
     translation_errors = translation_errors[~np.isnan(translation_errors)]
     rotation_errors = rotation_errors[~np.isnan(rotation_errors)]

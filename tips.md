@@ -8,4 +8,7 @@ Faster eigen values computation:
     
     * (u,v) = ((x,y) + 50) / meters_per_pixel
 
+* import cv2 in global_localization.py will cause error?
+
+
 
